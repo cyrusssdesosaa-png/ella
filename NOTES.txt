@@ -1,0 +1,513 @@
+CYRUS PROJECT NOTES
+For the personal AI only. Dated 3 Nov 2026.
+Owner: Cyrus Wendell P. De Sosa. Timezone: Asia/Manila (UTC+8).
+
+Load one project and one skill per job. Do not paste this whole file into every chat.
+Big builds stay on D:\ (1 TB drive, label "1tb yey"). C: stays light.
+Never copy passwords, API keys, .env, credentials.local.txt, or appsettings.Production.json into a reply.
+
+
+============================================================
+1. HOW CYRUS WORKS
+============================================================
+
+Who
+- Computer Engineering student. Windows 11. Works in Cursor.
+- Night chatter shift: 10pm to 6am Philippine time.
+- Day work: school, Unity, Wally Wombats client job.
+
+How he talks
+- Short, casual, typed fast. Typos are normal.
+- "more" means expand the thing already on screen. Do not start a new topic.
+- "nice" means the direction is right. Keep going.
+- "let me see the system" means show the layout, not more options.
+- A plan is allowed when he asks to plan. After he agrees, build.
+- Plain English. Lead with the result.
+
+Pictures are the spec
+He sends a screenshot instead of describing the bug. The picture is the request.
+1. Look at the image first. Zoom if the text is small.
+2. Say what is on screen in a few sentences, including the exact error text.
+3. Do the job the picture implies. A description alone is not finished, unless he only asked what it is.
+4. If one corner is blurry or cut off, name that one gap and continue with the rest.
+5. After a visual change, check the real Unity window or browser. A code edit alone is not proof.
+
+What each kind of picture means
+- Unity Game, Scene, Console, Inspector: Aura at D:\capstone, unless he named another Unity project. Pink materials, missing arrows, wrong camera, compile errors.
+- Phone shot of someone else's app: rebuild the flow in an original UI. Do not copy their logo, name, or exact skin. July 2026 loan chats were this. GCash-style shots. The build had to be his own loan tracker. One loan, limit 8000.
+- Fan chat screenshot: the latest fan bubble is the message. Reply with the night-shift rules. Ignore her own previous bubble unless he asks for a follow-up.
+- Windows, Cursor, or browser error: quote the visible error, then fix the cause. A Cursor outage is not a project bug.
+- Wally website crop or Teams frame: client evidence. Read the visible words. Do not guess a price, date, or number that is unreadable.
+- A look he wants for Jarvis or GOD: copy the layout idea only (sidebar, thread, composer). Do not copy logos or brand assets.
+
+Machine habits
+- Unity for Aura: 6000.3.11f1 at C:\Program Files\Unity\Hub\Editor\6000.3.11f1\Editor\Unity.exe
+- If the Editor already has the project open, use Unity MCP. Do not open a second instance.
+- If MCP is down, say so and read the files. Do not pretend the console was checked.
+- Long chats full of screenshots make Cursor slow. Prefer a fresh chat for a new task.
+
+Done means
+- The file is in the right project path.
+- He can open it the way he already opens that app (open.bat, Desktop shortcut, Unity Play, the site).
+- The reply tells him the path and what changed.
+- On shift, a fan line gets only the send text plus the English line. No intro.
+
+
+============================================================
+2. AURA AR CAMPUS NAVIGATION (CAPSTONE)
+============================================================
+
+What
+Phone AR app. Places a SketchUp model of the school in the room, then walks the user to a room with a minimap, arrows, and search. Product name: Aura. Scene that matters: finalapp 2.
+
+Path
+D:\capstone
+User manual: Docs\users-manual.md
+Change log: STATUS.md
+Contributor on the manual: Cyrus Wendell P. De Sosa
+
+Stack
+- Unity 6000.3.11f1, URP, AR Foundation, ARCore on Android
+- Input System only. Do not call legacy UnityEngine.Input
+- Pre-placed nodes under Building_Floorplan. A* in FinalUserNavigationController
+- ML under Tools\ml_pipeline and v2m_video_pipeline. Label Studio was used. Keep yolo_hybrid, dataset_seg_hybrid, the latest YOLO run, and segformer
+- Unity MCP package: com.ivanmurzak.unity.mcp
+- Android APKs were built from this folder
+
+Flow that was built
+Welcome, then "at the entrance" or "already inside", then floor choice, then a bird's-eye map tap, then Start / Confirm. That drops an ARAnchor named WorldAnchor. Building_Floorplan stays parented to that anchor so the map does not ride the camera.
+
+Walking on the phone uses the AR camera delta times androidLocomotionMetersScale, with a jump clamp and smoothing. GPS hybrid was tried and turned down. Indoor GPS is noisy. A small "Walk x" tuner saves to PlayerPrefs.
+
+Mesh1 and Mesh2 are the floors. Height decides which floor the minimap treats as current. Renderers stay on so pathfinding colliders do not vanish. Search is a maps-style box over waypoint nodes (WaypointSearchAndNavigateUI). Arrows and the route line follow the obstacle-lifted path. They must not cut through walls. Arrival clears the path and can speak with Android TTS.
+
+QR image anchoring was removed. Anchoring is manual Start / Confirm only.
+
+FinalAppPresentationCheat forces a desktop demo and can tint the floorplan magenta. Minimap and arrows stay their own colors.
+
+Defense docs
+Docs\system-block-diagram.svg
+Docs\system-schematic-diagram.svg
+Docs\system-flow-chart.svg
+plus a PNG of the flow chart
+Docs\users-manual.md
+
+Do not rename
+finalapp 2, Building_Floorplan, Mesh1, Mesh2, Nodes, Player, Player 2 (inactive pose marker), AR_XRHost, NavigationSystems, ViewCamera, FinalApp_UICanvas, WorldAnchor.
+GameObject.Find fallbacks use these names.
+
+Scripts
+- Assets\Scripts\FinalAppSimple\FinalAppARFloorplanAnchor.cs
+- Assets\Scripts\FinalAppSimple\FinalAppCircularMinimap.cs
+- Assets\Scripts\FinalAppSimple\AuraOnboardingFlow.cs
+- Assets\Scripts\FinalAppSimple\FinalAppPresentationCheat.cs
+- Assets\Scripts\ARCampusNavigationDev\FinalUserNavigationController.cs
+- Assets\Scripts\ARCampusNavigationDev\ARPathNavigationController.cs
+- Assets\Scripts\ARCampusNavigationDev\WaypointSearchAndNavigateUI.cs
+- Assets\Scripts\ARCampusNavigationDev\NodeInteractionController.cs
+
+Scale
+Building_Floorplan localScale is 280. That is the SketchUp authoring scale, not measured meters. Do not rescale the building to fix walking. Tune androidLocomotionMetersScale.
+
+How he works on it
+He sends Game view or phone photos when the map is pink, arrows are wrong, the player falls, or search is empty. Read the shot, then the script and the scene. Append real changes to STATUS.md. Refresh and compile before calling it build-ready.
+Editor Play Mode is a desktop stand-in. AR subsystems are off in the Editor on purpose. Device truth is an Android build.
+
+Bugs that already ate time
+- Floorplan looked solid on device when the material was not really transparent (URP Unlit, _Mode, _TintColor).
+- Map drifted because Building_Floorplan got parented under the camera or player, or the anchor froze while tracking kept moving.
+- A* found no path when the graph had no edges, when physics chords were skipped, or when the safety plane was in the raycast mask.
+- Android search text snapped back to the partial query because the soft keyboard restored it.
+- Minimap proxies copied the cyan floor tint and looked like a slab.
+- Player 2 must stay a transform marker. A second CharacterController phased through the mesh.
+- C: fills up from Unity temp, Gradle, and ML frame dumps. Clean generated caches, not the source model or the current dataset.
+
+Status
+Prototype used for the manual and presentation. STATUS.md notes run through 7 May 2026 (ML storage cleanup) and 4 May 2026 (contributor statement). Check STATUS.md and Plastic or git before assuming a later fix is missing.
+
+Do not
+- Bring QR anchoring back.
+- Rename the objects listed above.
+- Store new video datasets or YOLO runs on C:.
+- Claim indoor GPS is accurate.
+
+Skill: aura-unity
+
+
+============================================================
+3. GOD (LOCAL PERSONAL AI)
+============================================================
+
+What
+Generic Omniscient Digital Intelligence. Local-first personal AI for this PC. This is the finished desktop app. Jarvis in cy projects is a later idea and a different folder.
+
+Path
+D:\GOD
+Desktop shortcut GOD opens D:\GOD\desktop-shell\release\GOD.exe
+Working directory: D:\GOD
+
+Old shortcut JARVIS points at D:\god\GOD.exe and app\window.py. On Windows that is the same folder. window.py was not there on 3 Nov 2026. Use the desktop-shell exe.
+D:\JAVIS is empty. Do not put work there.
+
+Stack
+Python 3.11+, pytest, Electron (Node).
+Optional Ollama: llama3.2:3b and moondream. Optional FFmpeg and NVIDIA.
+Dev API was 127.0.0.1:8787. The product is the desktop window, not the browser.
+SQLite chats. Vision, voice, tools, memory, model routing, MCP center, Unity bridge, Story Studio bridge.
+
+What shipped (changelog through 1.31.0)
+- Action tasks run and verify without him having to say "continue".
+- Chats save, rename, search, delete, export to markdown.
+- Big prompts become a multi-step plan. Loop is inspect, act, verify.
+- JARVIS-style HUD: frameless window, gauges, tasks, model, voice, memory, tools.
+- Vision: /api/vision, screenshot, describe-screen, analyze, upload. A picture is input.
+- Monitor reads real CPU, disk, network, GPU temperature.
+- Unity MCP only if GOD_ENABLE_UNITY_MCP=true and the Editor bridge is on port 8080.
+- Story Studio is not inside this repo. Bridge file talks to D:\AIStoryStudio.
+- Tray, autostart, watchdog, notifications, backup, update check. Docs are under docs\.
+
+Daily install
+cd D:\GOD
+.\install.ps1 -Desktop
+
+Dev: .\start.ps1 then npm start inside desktop-shell.
+Health: python -m scripts.health_check
+
+Important files
+README.md, CHANGELOG.md, ARCHITECTURE.md, pyproject.toml, requirements.txt
+docs\RELEASE.md, docs\UI.md, docs\AGENTS.md, docs\MEMORY.md, docs\UNITY_MCP.md, docs\TOOLS.md
+agents\ and desktop-shell\
+.env stays local. Never print it.
+
+How he talks to it
+"status", "inspect this project", "fix this", "build this". He wants it finished.
+Hardwire and the old Jarvis name were earlier attempts. GOD is the one still on disk.
+If he sends a picture while GOD is the subject, use GOD vision if it is running. In Cursor, read the image, and change GOD code only if he asked for a code change.
+
+Status
+Installed. Desktop shortcut exists. Last changelog entry 1.31.0. Folder dates cluster on 26 Aug 2026. Read CHANGELOG.md before adding a feature that already shipped.
+
+Limits
+- 8 GB VRAM. Truncate tool results. Do not dump a whole repo into one prompt.
+- Unity connection fails when the Editor is closed. Say that plainly.
+
+Do not
+- Rebuild Phase 0.
+- Merge AI Story Studio into the GOD git repo.
+- Store models or media caches on C:.
+- Send him to the browser on port 8787 as the product.
+
+Skill: god-local-ai
+
+
+============================================================
+4. AI STORY STUDIO
+============================================================
+
+What
+Story and video module that GOD calls. Not part of the GOD git repo.
+
+Path
+D:\AIStoryStudio
+Bridge: god.studio.json, reached by studio.bridge
+
+Layout
+- projects\ = story projects
+- exports\ = rendered output
+- assets\ = source media
+- ollama-models\ = local models. Leave them on D:\
+- README.md = the short contract with GOD
+
+Rules
+New story work goes in projects\. Finished video goes in exports\.
+Do not copy this tree into D:\GOD. Do not put the media on C:.
+If he sends a frame or storyboard, describe the shot, then put files in the matching folder under projects\.
+
+Status
+Scaffold dated 26 Aug 2026. README touched again 29 Oct 2026. Check projects\ before assuming it is empty.
+
+Skill: god-local-ai (same bridge)
+
+
+============================================================
+5. WALLY WOMBATS (DON AND DAVID)
+============================================================
+
+What
+Client work for David Gilbert. Rebuild of wallywombats.com for North Rainbow, Henderson, and Bullhead City, on the existing SmarterASP.net account.
+Cyrus is the builder. John was the design contact. David is the client. Bullhead opening was the October 2026 launch reason.
+
+Paths
+- Planning: D:\don and david projects
+- Public site: D:\final website
+- Admin: D:\final admin website
+- Rehab draft: D:\don and david projects\rehab-directives-draft
+- Old desktop copies: C:\Users\USER\Desktop\wallywombats, wallywombats_v3, "wally wombats automatic emaill"
+- MoreMe agent: C:\Users\USER\AppData\Local\Programs\moreme-monitor-agent
+
+Read first
+1. 00-intake\project-brief-from-chat.md
+2. 00-intake\meeting-summary-2026-09-28.md
+3. 03-plan\plan-v2.md
+4. 03-plan\feature-matrix.md
+5. 02-research\smarterasp\smarterasp-notes.md
+
+Secrets live in 00-intake\credentials.local.txt and appsettings.Production.json. Never quote them. Never commit them.
+
+Stack
+- Public site and admin are ASP.NET.
+- Admin project: WallyWombatsAdmin.csproj, net8.0, Entity Framework Core SQL Server, out-of-process hosting for SmarterASP.
+- Rehab draft is a static site (index.html, css, photos) with Wrangler, so it can sit on Cloudflare.
+- Host notes are under 02-research\smarterasp\.
+- Inquiry mail named in the public README: support@wallywombats.com. Password stays in production settings only.
+
+What was built
+Intake, recordings index, research, plan v2, feature matrix, deliverables, code, assets, Oct 6 test folder.
+Meeting video: C:\Users\USER\Videos\Screen Recordings\Screen Recording 2026-09-28 122839.mp4
+Chat video: Screen Recording 2026-10-03 235050.mp4
+Those videos were not copied in (too big). Use 01-recordings\transcripts\ unless he asks for the raw file.
+
+Plan dates written down: 6 Oct 2026 UAT preview, 10 Oct 2026 live for Bullhead. The 4 Oct checklist still had open items (SmarterASP login, .NET scaffold, John assets, first UAT deploy). Later the public site and admin folders exist, so read plan-v2 and the site projects before saying a step is still undone.
+Rehab draft was still being edited on 2 Nov 2026.
+MoreMe is an installed Electron app. Chats were account setup and undoing changes. Do not rebuild it unless he asks.
+
+How he works
+He sends Teams frames, meeting frames, and website screenshots. Those images are what David said and what the page should look like. Save findings into 00-intake or 01-recordings\transcripts when he wants them saved.
+Site jobs: parties, passes, locations, birthday packages, inquiry mail.
+UAT first. Do not invent a production deploy. Go-live steps are in 04-deliverables.
+
+Do not
+- Email David or John unless Cyrus asked for a draft he will send himself.
+- Overwrite wallywombats-original or the Desktop v3 archive. Those are backups.
+- Guess an unreadable price or date.
+
+Skill: wally-client
+
+
+============================================================
+6. NIGHT-SHIFT CHATTER
+============================================================
+
+What
+Night job tool. He pastes a fan message, or sends a screenshot of the chat, and needs a reply he can paste. Default voice is a woman, in German, with an English line under it.
+This note is behavior only. Do not store script lines here. Write a fresh reply every time.
+
+Paths
+- Rules: C:\Users\USER\fckkk\brain\CHATTER-MASTER.md
+- Voice notes: C:\Users\USER\fckkk\brain\ (seduce, kissing, tits, ass, pussy, blowjob, feet, mass-message, sales)
+- PDFs: C:\Users\USER\fckkk\brain\pdfs\
+- Reply page: C:\Users\USER\fckkk\reply.html via open-reply.bat
+- Cursor rules: C:\Users\USER\fckkk\.cursor\rules\fansly-night-shift.mdc and fansly-scripts-brain.mdc
+
+D:\fckkk is an older copy of the reply page. Current brain is on C:\Users\USER\fckkk. MOVED-TO-D.txt only means the big browser data moved to D:\fckkk.
+
+Reply shape
+When it is a fan line, a picture of a fan chat, or he says reply:
+1. German send text only. No hello, no bullets.
+2. Under it, one English line marked EN.
+3. One to three sentences unless he says long.
+4. Schatz in German. Never Baby, babe, or love in the German line. English may say babe.
+5. Emoji only at the end of the German line and the end of the English line.
+6. Sound like a person. "jaaa" for yes. Not textbook German.
+7. No ellipsis character. No em dash. Period, comma, or two short sentences.
+8. Mirror the kink he showed. Default body: pussy, tits, clit. Tag trans: cock, ass, mouth. Do not mix pussy and schwanz unless the fan already did.
+9. No tip and no PPV price unless he tags tip, sale, or ppv.
+10. If the fan bought it, thank him and stay in the scene. Do not lock a new price.
+11. Meetup: only if he spoils first, then she thinks about it. Not a hard no unless Cyrus writes one.
+
+Mass message (mm): English first, then German, two or three sentences, new wording each time.
+Unclear tags (cold, follow, spender, after tip, br, soft, f): read CHATTER-MASTER.md.
+
+Pictures
+Latest fan bubble is the message. If age is unclear, do not continue a sexual reply until the fan is clearly an adult. If the screen shows a minor, stop. That is illegal.
+
+Shift rules
+10pm to 6am. Do not open Unity, do not search the web, do not explain the reply.
+Brain files are concepts. Do not paste an English PDF line. Do not copy an old mass-message file word for word.
+
+Do not
+- Put prices in unless tagged.
+- Store fan names, spending, or private logs in these notes.
+- Write anything sexual about a minor.
+
+Skill: night-shift-reply
+
+
+============================================================
+7. PORTABLE TRANSLATOR
+============================================================
+
+What
+Local web page for translation, with extra polish for German, English, and Dutch creator-chat wording.
+
+Path
+C:\Users\USER\fckkk\translator
+Open with open.bat. That starts Python with no leftover command window and opens http://127.0.0.1:8787
+Do not open index.html by itself. Needs Python and internet.
+Copy the whole folder to another PC. Steps are in COPY-TO-OTHER-PC.txt
+
+Files
+server.py, index.html, app.js, styles.css, languages.js, slang.js, silent-open.vbs, open.bat
+
+Behavior
+Uses Google and MyMemory. Not an offline model.
+Languages: English, German, Dutch, French, Spanish, Italian, Polish, Portuguese, Turkish, Russian, Czech, Danish, Swedish, Norwegian, Finnish, Romanian, Hungarian, Greek, Japanese, Korean, Chinese, Arabic, Filipino.
+Quick pairs: German-English, Dutch-English, German-Dutch.
+Slang mode is German, English, and Dutch only.
+A fan reply is the chatter note, not this app. This app only moves words between languages.
+
+Pictures
+If he screenshots the page, read the language pair, the slang toggle, and any error before changing code.
+
+Status
+Working. Folder last written 25 Sep 2026.
+
+Do not
+- Swap in a paid API unless he asks.
+- Bind the server to anything except localhost.
+
+Skill: desk-tools
+
+
+============================================================
+8. READ ALOUD
+============================================================
+
+What
+Browser page that speaks text he pastes. Built when Unity text-to-speech was not available in that session.
+
+Path
+C:\Users\USER\fckkk\read-aloud
+Files: index.html, app.js, styles.css, open.bat
+
+Behavior
+Paste or type, then Play. Shows word count and a rough time. Theme toggle in the header. Fonts: Fraunces and Outfit. Uses the browser speech engine. No paid voice.
+Aura has its own Android TTS in FinalAppAndroidTtsSpeaker.cs for navigation prompts. Do not mix them. Campus voice stays in D:\capstone.
+
+Pictures
+If Play makes no sound, the wrong voice, or a broken layout, change app.js or styles.css only.
+
+Status
+Finished small page. Folder last written 13 Aug 2026.
+
+Do not
+- Pull this into the Unity capstone.
+- Add an account or a cloud voice unless he asks.
+
+Skill: desk-tools
+
+
+============================================================
+9. JARVIS IN CY PROJECTS (THIS BUILD)
+============================================================
+
+What
+The AI he asked for on 3 Nov 2026. His own daily assistant. Grok-like chat, able to code, with skills, memory, and routines.
+Not Claude Code (that needs a paid plan). Not a fork of a GitHub Jarvis repo.
+These notes are the first real piece. The chat window was still a plan on this date.
+
+Path
+C:\Users\USER\fckkk\cy projects
+
+Plan, not built yet
+- Dark Grok-style window. Chats on the left, thread in the center, one main assistant.
+- Free cloud first. Groq for daily use. OpenRouter for a monthly list of official free models. Ollama only as backup.
+- Keys from his own accounts, pasted into .env. No search for leaked keys.
+- Starts when Windows logs in. Short profile plus the newest 30 facts. Check-in at a time he sets. Asia/Manila.
+- Each extra bot gets its own folder and may only edit that folder.
+- Skills are text files. Each message loads the one skill that fits.
+- He wants it to adapt when he corrects it, and he wants to undo a bad change.
+- Messenger and a coder that calls tools come after chat works.
+- Coding tools stay off until a free model that actually calls tools is connected.
+
+GOD at D:\GOD is the older desktop AI and stays. Do not delete GOD. Do not pretend Jarvis is installed.
+
+On disk now
+README.md, profiles\, skills\, NOTES.txt
+.cursor\skills\ points at skills\ so Cursor can load them while this folder is open.
+
+When he says build Jarvis
+Start here. Do not reopen the model debate unless a free endpoint is dead.
+Scaffold a local Python server, a data folder for chats, and the window.
+Point the assistant at profiles\INDEX.md and skills\.
+
+Pictures of Grok or Cursor are layout references only.
+
+Do not
+- Install Claude Code as the engine.
+- Hunt GitHub for API keys.
+- Load every skill into one prompt.
+
+Skill: project-memory
+
+
+============================================================
+10. EARLIER WORK WITH NO FOLDER ON DISK (SCAN 3 NOV 2026)
+============================================================
+
+Do not invent source files. If he names one, search the PC again, then rebuild only what he still wants.
+
+Hardwire
+Local desktop AI started 16 Aug 2026, before GOD. Tray, Windows startup, his rules. Unity MCP was down, so it was a native Windows app. Cursor workspace slug was c-Users-USER-fckkk-hardwire. Folder is gone. Successor is D:\GOD. If he wants new assistant work, ask whether he means GOD or cy projects.
+
+Birthday presentation
+24 Jun 2026. Static website for his girlfriend, made in an empty workspace. No birthday folder under C:\Users\USER or D:\ at depth 2. If he wants it again, ask where it was saved or rebuild a new page. Do not search his personal photos and publish them.
+
+Personal loan tracker
+17 Jul 2026. Phone screenshots of a lending app. He wanted the loan feature only: one loan, limit 8000. Build was an original tracker, not a GCash or GLoan copy. No folder found. If he returns, read the screenshot, keep his numbers, use a plain original UI.
+
+Assassin game
+2 Jul 2026. Planning chat for a local Unity game. Not a finished folder. Do not start it unless he asks again. If he does, put it on D:\, not C:.
+
+Not his project
+Desktop "Grok Bot" is xAI's app at C:\Users\USER\AppData\Local\Programs\Grok Bot.
+
+Do not extend
+A browser automation experiment for a game sits in C:\Users\USER\fckkk and D:\fckkk (auto_wh.py, OwO Auto Farm.vbs). No skill. Do not add features.
+
+
+============================================================
+SKILL INDEX (LOAD ONE)
+============================================================
+
+screenshot-analysis
+Use when he attaches a picture, a phone shot, a Unity view, a chat shot, an error dialog, or says look at this / fix this from an image.
+Steps: look, say what is on screen, do the job, name one blurry gap, then check the real window.
+
+project-memory
+Use when he says continue my project, my projects, which project, or asks for his skills.
+Read profiles\INDEX.md, open the one matching profile, follow its path and its do-not list.
+"more" expands the current piece only.
+Status answers must say the path and whether the status was rechecked or is from these notes dated 3 Nov 2026.
+
+aura-unity
+Use for Aura, capstone, finalapp, floorplan, minimap, AR anchor, D:\capstone.
+Read profiles\aura-capstone.md first. Scene finalapp 2. Scale stays 280. No QR. No renamed objects. Log real edits in STATUS.md.
+
+god-local-ai
+Use for GOD, the HUD, vision panel, ollama, D:\GOD, or Story Studio.
+Use the Jarvis section only when he means the new app in cy projects.
+Product is the desktop exe. Vision already exists. Do not re-add the 1.31 continue loop.
+
+wally-client
+Use for Wally, Wombats, David Gilbert, SmarterASP, Bullhead, the admin site, rehab directives, or MoreMe for that job.
+Read plan-v2 when a decision is unclear. UAT before live. Never print credentials.
+
+night-shift-reply
+Use for a fan message, a chat screenshot, or the words reply, antwort, mm, tip, ppv, trans. Adults only.
+Output is the German line plus the EN line. No tools on a normal reply. Stop if the person is a minor.
+
+desk-tools
+Use for the translator, slang mode, or Read Aloud in the browser.
+Translator: open.bat, port 8787, localhost only.
+Read Aloud: browser speech only. Not the campus TTS.
+
+
+============================================================
+FILE MAP
+============================================================
+
+C:\Users\USER\fckkk\cy projects\NOTES.txt          this file
+C:\Users\USER\fckkk\cy projects\profiles\          one profile per project
+C:\Users\USER\fckkk\cy projects\skills\            one skill per job
+C:\Users\USER\fckkk\cy projects\.cursor\skills\    same skills, for Cursor

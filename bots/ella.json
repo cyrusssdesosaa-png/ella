@@ -1,0 +1,7 @@
+{
+  "id": "ella",
+  "name": "Ella",
+  "panel": "http://127.0.0.1:8765",
+  "core": ["talk", "memory", "day", "projects", "token-scout", "adapt", "how-i-help"],
+  "notes": "Local AI assistant. Voice loop: faster-whisper STT, Piper TTS, Ollama LLM. Ring UI at the panel URL."
+}

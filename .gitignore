@@ -1,0 +1,15 @@
+.env
+__pycache__/
+*.pyc
+*.tmp
+data/*.json
+data/*.log
+data/*.txt
+data/*.lock
+data/backups/
+data/sessions/
+data/skill-history/
+data/stop.flag
+_pip_backup/
+.pytest_cache/
+web/_backup_*/

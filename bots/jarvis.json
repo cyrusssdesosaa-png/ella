@@ -1,0 +1,8 @@
+{
+  "id": "jarvis",
+  "name": "Jarvis",
+  "face": "isair Jarvis.exe",
+  "panel": "http://127.0.0.1:8765",
+  "core": ["talk", "memory", "day", "projects", "token-scout", "adapt", "how-i-help"],
+  "notes": "The installed Jarvis app is the voice. This folder is the clock, the memory, and the skill index."
+}

@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>E.L.L.A.</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css?v=11">
+</head>
+<body>
+  <!-- TOP BAR -->
+  <header id="topbar">
+    <div class="topbar-left">
+      <span class="wordmark">E.L.L.A.</span>
+    </div>
+    <div class="topbar-center">
+      <button class="brain-pill" id="brainPill" type="button">
+        <span class="brain-dot"></span>
+        <span id="brainLabel">LOCAL · qwen2.5:7b</span>
+      </button>
+    </div>
+    <div class="topbar-right">
+      <button class="token-pill" id="tokenPill" type="button" title="Context and token ledger">
+        <span class="token-kicker">CTX</span>
+        <span id="tokenLabel">0 / 4k</span>
+        <span class="token-bar"><span id="tokenFill"></span></span>
+      </button>
+      <div class="status-dots" id="statusDots">
+        <span class="sdot green" title="Ollama"></span>
+        <span class="sdot gray" title="Whisper"></span>
+        <span class="sdot gray" title="Piper"></span>
+      </div>
+      <span class="clock" id="clock">12:00</span>
+      <button class="gear-btn" id="gearBtn" type="button" title="Settings">⚙</button>
+    </div>
+  </header>
+
+  <!-- LEFT RAIL -->
+  <nav id="rail">
+    <button class="rail-btn active" data-view="home" title="Home">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/></svg>
+    </button>
+    <button class="rail-btn" data-view="inbox" title="Inbox">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-6l-2 3H10l-2-3H2"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg>
+    </button>
+    <button class="rail-btn" data-view="tasks" title="Tasks">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+    </button>
+    <button class="rail-btn" data-view="brain" title="Brain Graph">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/><line x1="12" y1="8" x2="5" y2="16"/><line x1="12" y1="8" x2="19" y2="16"/><line x1="5" y1="19" x2="19" y2="19"/></svg>
+    </button>
+    <button class="rail-btn" data-view="health" title="Health">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+    </button>
+    <div class="rail-spacer"></div>
+    <button class="rail-btn" data-view="settings" title="Settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+    </button>
+  </nav>
+
+  <!-- HOME VIEW -->
+  <main id="homeView" class="view active">
+    <!-- Ambient background graph -->
+    <canvas id="ambientGraph"></canvas>
+
+    <!-- Center stage: orb -->
+    <div id="centerStage">
+      <div class="orb-glow"></div>
+      <canvas id="orb" width="640" height="640"></canvas>
+      <div class="state-label" id="stateLabel">Online</div>
+    </div>
+
+    <!-- Live caption -->
+    <div id="liveCaption"></div>
+
+    <aside id="hud" class="glass">
+      <div class="hud-title">Tokens</div>
+      <div class="hud-grid">
+        <div><span>Prompt</span><strong id="hudPrompt">0</strong></div>
+        <div><span>Reply</span><strong id="hudReply">0</strong></div>
+        <div><span>Session</span><strong id="hudSession">0</strong></div>
+        <div><span>Speed</span><strong id="hudSpeed">—</strong></div>
+      </div>
+      <div class="hud-foot">
+        <span id="hudCalls">0 calls</span>
+        <span class="hud-cost">$0.00</span>
+      </div>
+    </aside>
+
+    <!-- Chat panel -->
+    <aside id="chatPanel">
+      <div class="chat-header">
+        <span class="chat-title">Chat</span>
+        <span class="chat-tokens" id="chatTokens">0 tok</span>
+        <button class="chat-collapse" id="chatToggle" type="button" title="Toggle chat">◀</button>
+      </div>
+      <div class="chat-messages" id="chatMessages"></div>
+      <div class="quick-chips" id="quickChips"></div>
+    </aside>
+  </main>
+
+  <!-- BRAIN VIEW -->
+  <div id="brainView" class="view">
+    <canvas id="brainGraph"></canvas>
+    <div class="brain-controls glass" id="brainControls">
+      <button class="bc-toggle" id="bcToggle" type="button">Controls ▾</button>
+      <div class="bc-drawer" id="bcDrawer">
+        <div class="bc-row">Repel <input id="repel" type="range" min="0" max="100" value="40"></div>
+        <div class="bc-row">Link length <input id="link" type="range" min="20" max="100" value="55"></div>
+        <div class="bc-row"><button class="bc-btn" id="fitBtn" type="button">Reset view</button></div>
+        <div class="bc-section">Filter</div>
+        <div id="brainCats"></div>
+      </div>
+    </div>
+    <div class="brain-inspector glass" id="brainInspector">
+      <div class="bi-title" id="biTitle">Click a node</div>
+      <div class="bi-body" id="biBody">Select a node in the graph to see its contents.</div>
+    </div>
+    <div class="brain-hubs glass" id="brainHubs">
+      <div class="bh-title">Top Hubs</div>
+      <div id="hubList"></div>
+    </div>
+  </div>
+
+  <!-- PLACEHOLDER VIEWS -->
+  <div id="inboxView" class="view">
+    <div class="dashboard-page">
+      <h2 class="dashboard-title">Activity</h2>
+      <div class="activity-list" id="activityList"></div>
+    </div>
+  </div>
+  <div id="tasksView" class="view">
+    <div class="dashboard-page">
+      <div class="dash-head">
+        <h2 class="dashboard-title">Projects</h2>
+        <input id="dashFilter" type="text" placeholder="Filter bots..." autocomplete="off">
+      </div>
+      <div class="dashboard-grid" id="dashboardGrid"></div>
+    </div>
+  </div>
+  <div id="healthView" class="view">
+    <div class="dashboard-page">
+      <h2 class="dashboard-title">Systems</h2>
+      <div class="health-stats" id="healthStats"></div>
+      <div class="ctx-meter glass">
+        <div class="ctx-meter-top">
+          <span>Context window</span>
+          <strong id="ctxReadout">0 / 4,096</strong>
+        </div>
+        <div class="ctx-track"><span id="ctxFill"></span></div>
+      </div>
+      <div class="health-split">
+        <section class="glass health-card">
+          <h3>Recent calls</h3>
+          <div id="healthCalls"></div>
+        </section>
+        <section class="glass health-card">
+          <h3>Models on this PC</h3>
+          <div id="healthLocal"></div>
+          <h3 class="health-sub">Free cloud models</h3>
+          <div id="healthFree"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+  <div id="settingsView" class="view">
+    <div class="settings-page glass">
+      <h2>Settings</h2>
+      <div class="setting-group">
+        <h3>Orb Style</h3>
+        <div class="setting-row"><label>Ring</label><input type="radio" name="orbStyle" value="ring" checked></div>
+        <div class="setting-row"><label>Ambient graph behind orb</label><input type="checkbox" id="ambientToggle" checked></div>
+      </div>
+      <div class="setting-group">
+        <h3>Reduced Motion</h3>
+        <div class="setting-row"><label>Reduce animations</label><input type="checkbox" id="reducedMotion"></div>
+      </div>
+      <div class="setting-group">
+        <h3>Conversation Mode</h3>
+        <div class="setting-row"><label>Auto-listen after speaking</label><input type="checkbox" id="convoToggle"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MINIMIZED PROJECT CHIPS -->
+  <div id="miniChips"></div>
+
+  <!-- INPUT BAR -->
+  <div id="inputBar">
+    <button class="proj-btn" id="projBtn" type="button" title="Projects">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+    </button>
+    <form id="inputForm">
+      <input id="chatInput" type="text" placeholder="Ask Ella anything..." autocomplete="off">
+      <button class="mic-btn" id="micBtn" type="button" title="Push to talk (Space)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+      </button>
+      <button class="send-btn" id="sendBtn" type="submit" title="Send (Enter)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      </button>
+      <button class="stop-btn hidden" id="stopBtn" type="button" title="Stop (Esc)">
+        <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+      </button>
+    </form>
+  </div>
+
+  <!-- PROJECT LAUNCHER OVERLAY -->
+  <div id="projLauncher" class="hidden">
+    <div class="proj-overlay" id="projOverlay"></div>
+    <div class="proj-grid" id="projGrid"></div>
+  </div>
+
+  <!-- FLOATING PROJECT WINDOWS (injected by JS) -->
+  <div id="projWindows"></div>
+
+  <!-- TOAST -->
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="/app.js?v=11"></script>
+</body>
+</html>
