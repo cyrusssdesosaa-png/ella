@@ -16,6 +16,8 @@ Two things have to be running. Ella does not start Ollama.
 1. Ollama: `ollama serve`. Listens on `127.0.0.1:11434`. Models live under `D:\AIStoryStudio\ollama-models`.
 2. Ella: `startup.bat` in `C:\Users\USER\fckkk\cy projects`. Listens on `127.0.0.1:8765` only.
 
+The private copy on GitHub is https://github.com/cyrusssdesosaa-png/ella. Keys, chat logs, and backups are not in that repo.
+
 If Ollama is down, chat says: start it with `ollama serve`, then ask again.
 
 ## Brain and voice
