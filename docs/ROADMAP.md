@@ -1,35 +1,50 @@
 # Ella roadmap
 
-This roadmap follows the requested phase order. Security work begins in Phase 0 and gates any tool, automation or external integration capability. Status is based on source inspection on 2026-11-04, not live testing.
+This roadmap reflects the owner-confirmed autonomous/hybrid Command Center blueprint. It is a plan, not an implementation claim. Security and truthful capability reporting are cross-cutting gates. Current status is source-based; no phase is considered manually accepted without Cyrus's review.
 
-| Phase | Goal | Initial deliverables / exit criteria | Status |
+## Runtime reliability gate (immediate)
+
+Before adding new intelligence, tools, or dashboard claims:
+
+1. Establish which Ella process owns port 8765 and ensure there is one intentional server owner.
+2. Define predictable startup/shutdown and process ownership.
+3. Check Ollama and configured-model availability without changing model defaults.
+4. Report actual provider/model per response and truthful dependency health.
+5. Verify graceful failures when local/cloud providers are unavailable.
+6. Preserve Phase 1A API protections and complete its manual acceptance checklist.
+
+**Status:** Outstanding. A read-only process snapshot found two `server.py` processes and ambiguous/transient TCP table evidence. No process cleanup or restart is authorized here. See [CURRENT_STATE.md](CURRENT_STATE.md) and [SECURITY.md](SECURITY.md).
+
+## Phased plan
+
+| Phase | Focus | Deliverables / exit criteria | Status |
 |---|---|---|---|
-| 0. Repository takeover and audit | Establish facts and docs without replacing app. | Architecture/source map, current-state and security/bug audit; data/assets preserved; decisions and manual checklist. | **Documentation completed** in this change; no runtime validation. |
-| 1. Core reliability and session persistence | Fix high-risk correctness/availability issues. | Project-session isolation; defined conversation persistence; robust JSON writes; bounded requests; clear errors/cancellation; model/dependency defaults reconciled; manual acceptance. | Planned; first implementation milestone. |
-| 2. Token accuracy and systems monitoring | Make measurement trustworthy. | Separate cumulative/session/day counters, actual context capacity/use, timing, provider/model, cost provenance; health probes for backend/Ollama/STT/TTS; resource metrics only where verified. | Planned. |
-| 3. Interface improvements and Command Center | Extend existing UI without second frontend. | Core inbox/command center, current task/mode/model/project/status, reduced motion, responsive states, accessible errors, lightweight rendering. | Partial UI exists; target center not implemented. |
-| 4. Memory and knowledge system | Improve source-linked recall without losing vault. | Session/short/long/project/procedural boundaries; retrieval/index policy; source citations; correction/delete/export; Memory Explorer. | Markdown vault and facts exist; advanced system planned. |
-| 5. Task engine and automation | Durable bounded work lifecycle. | Queue, decomposition, priority/dependencies, schedule, progress events, cancellation, retry limits, reports and safe persistence. | Not implemented beyond selected synchronous routines. |
-| 6. Security and permission framework | Enforce least privilege before actions. | Local API protection, permission capabilities, exact-action approvals, audit, secret store, path allowlist/sandbox, redaction, stop semantics, threat-model review. | Partial basics only; critical gaps remain. Must gate later phases. |
-| 7. Integration framework | Consistent connection/auth/health lifecycle. | Adapter contract, official-API review, secrets, scopes, rate limits, disconnect, tests/mocks, provider mode guarantees. | Basic model adapters only; broad framework planned. |
-| 8. Agents and specialized bots | Evolve existing prompt windows carefully. | Preserve bots; per-agent workspace/memory/tools/permissions, schedules, event history and supervision. | Prompt-configured windows exist; execution/isolation do not. |
-| 9. Voice and communication | Reliable accessible local voice and selected communication adapters. | STT/TTS health/error UX, language/voice configuration, wake/hotkey only after permission/privacy review, local-first input/output. | Partial STT/TTS loop in code; not run in this audit. |
-| 10. Career, content and productivity | Research/draft/track without fabricated claims. | Source-backed job/content research, truthful drafts, approval-gated submission/publishing, per-platform terms and rate limits. | Personas/plans exist; external workflows not implemented. |
-| 11. Self-healing and recovery | Bounded supervised recovery. | Health-based checks, exponential backoff, restart caps, safe restart boundaries, recovery log and escalation; no unrelated process termination. | Startup retry loop exists but is not a watchdog. |
-| 12. Windows desktop application | Reliable package around current UI/backend. | Dependency/preflight checks, process ownership, clean shutdown, install/update/rollback; retain browser dev mode. | pywebview launcher exists; package/installer not verified or built. |
-| 13. Advanced intelligence | Improve intent, planning, vision and multimodal reasoning. | Explicit uncertainty, clarifying questions, sourced knowledge, local vision/media queue and review step. | Partial image route; remainder planned. |
-| 14. Continuous maintenance | Sustainable operations. | Dependency/security updates, backup/restore drills, issue triage, regression checks, documented release process and periodic privacy review. | Planned. |
+| 0 | Repository takeover and architecture audit | Source-backed architecture, current state, risks and preservation baseline. | **Complete**; docs committed. |
+| 1A | Security foundation | Local API Host/Origin/token checks, validation/body limits, safe inputs/rendering, documented manual checks. | **Implemented in committed source; manual verification pending.** |
+| 1B | Conversation isolation | Separate main/project conversations and context; explicit session IDs and no accidental cross-context prompts. | Planned; known defect BUG-001. |
+| 1C | Reliable JSON persistence | Serialized writes, unique atomic temp files, corruption recovery and backup/restore strategy without premature migration. | Planned; known risk BUG-010. |
+| 1D | Cancellation and task lifecycle | Honest cancellation semantics, task states, progress/results/failures; no false completion claims. | Planned; current stop flag does not cancel. |
+| 1E | Accurate model/provider/token reporting | Actual provider/model, usage provenance, honest context/cost and dependency health. | Planned; current UI/accounting limitations remain. |
+| 2 | Runtime reliability and startup manager | One owned server, predictable start/stop, Ollama/model/dependency checks, graceful provider failures and real health status. | **Immediate gate outstanding.** |
+| 3 | AI behavior and capability registry | Registered capabilities declare implementation, availability, authorization and current operation; shared execution/result/error contracts. | Planned. |
+| 4 | Agent execution and bot management foundation | Preserve bots; controlled registration/delegation, isolated permissions/memory, execution records and cancellation. | Prompt windows exist; autonomous execution not implemented. |
+| 5 | Hybrid AI routing | Task/privacy/resource-aware local/cloud policy; actual provider metadata; explicit disclosure and no silent sensitive-data forwarding. | Basic routes exist; policy/routing framework planned. |
+| 6 | Permission and approval center | Backend-enforced Observe/Prepare/Modify/External permissions; action-bound approvals and revocable scoped automation grants. | Phase 1A API controls are not this action-approval system; planned. |
+| 7 | Integration framework and OAuth | Reusable adapter lifecycle, secure token storage, least privilege, health, revoke/disconnect, audit and mocks. | Not implemented beyond model APIs. |
+| 8 | Gmail integration | Search/read/summarize, authorized labels, drafts; send only after full-content action-specific approval. | Not implemented. |
+| 9 | Calendar and Drive | Official API/OAuth and explicit scopes; truthful connection/health and approval for mutations. | Not implemented. |
+| 10 | GitHub and project workspace | Authorized repo/project context, source-backed tasks and project-specific isolation. | Not implemented as an integration/workspace service. |
+| 11 | Automation engine | Schedules/triggers, conditions, assigned bot, scope, run history, retry/cancel and immediate revoke/override. | Not implemented beyond selected synchronous routines. |
+| 12 | Expanded Command Center interface | Extend the existing vanilla app with real dashboard, nav shell, collapsible context panel, bots/tasks/automations/inbox/integrations/memory/approvals/activity/system/settings. | Partial existing panel only; future UI depends on backend contracts. |
+| 13 | Advanced bot coordination | Delegation, result evaluation, consolidated response and permission-preserving bot-to-bot coordination through Ella. | Planned; depends on Phases 3, 4 and 6. |
+| 14 | Maintenance, recovery and optimization | Bounded watchdog, backups/recovery drills, dependency/security upkeep, measurable resource baselines and release discipline. | Planned. |
 
-## Recommended first implementation milestone
+## Interface delivery order
 
-**Phase 1 reliability slice**, with security fixes from Phase 6 treated as prerequisites:
+Build incrementally in the single existing frontend: (1) application shell and navigation; (2) Dashboard from verified current backend data; (3) chat/task status and project contracts; (4) bot/task/automation management when those backends exist; (5) Inbox and Gmail only after OAuth/approval foundations; (6) Integration, Memory, Approvals, Activity and System Monitor views as their data contracts become real. Unimplemented items must be visibly planned/unavailable, not decorative fake controls.
 
-1. Confirm with Cyrus current desired default model, mode semantics, and how project contexts should be scoped.
-2. Add a project-session-scoped prompt/history boundary; do not leak main chat context.
-3. Make the local API reject malformed/oversized requests and protect state-changing routes.
-4. Add per-file write serialization/unique temp files and bounded startup retry behavior.
-5. Make stop/cancel semantics honest; do not label a flag as cancellation.
-6. Correct UI/provider accounting labels and expose STT/TTS failures.
-7. Define backup manifest and verify restore separately before expanding backup behavior.
+## Next milestone
 
-Acceptance is manual and reviewable; no service/test run is implied. For each change, produce a diff and Cyrus's test checklist. Details and risks are in `docs/BUG_AUDIT.md`, `docs/SECURITY.md`, and `docs/DEVELOPMENT_RULES.md`.
+**Resolve and manually verify the runtime reliability gate**, then proceed to Phase 1B conversation isolation. Do not start Phase 1B until Cyrus identifies the intended server process and approves any restart/cleanup. Do not run tests, start Ella/Ollama, perform inference, or contact integrations without the owner's explicit instruction.
+
+For each implementation, list affected files, risk, data impact, rollback, and a manual checklist. Preserve the existing bots, projects, profiles, skills, memory, vault and working interface. Details are in [BUG_AUDIT.md](BUG_AUDIT.md), [SECURITY.md](SECURITY.md), and [DEVELOPMENT_RULES.md](DEVELOPMENT_RULES.md).

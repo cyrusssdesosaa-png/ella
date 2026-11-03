@@ -2,6 +2,10 @@
 
 **Audit date:** 2026-11-04. Status refers to repository implementation, not live service availability. No accounts were accessed and no integration was tested.
 
+## Owner-confirmed priority order
+
+Target sequence is **Gmail → Google Calendar → Google Drive → GitHub → Notion**, followed by additional services only after API, scope, privacy, security and maintenance review. This is a roadmap priority, not an installed or authorized service list. Gmail begins with read/search/summarize and draft capabilities; sending requires an approval screen with recipient, subject, complete message and attachments. Do not expose send as available before backend permission enforcement and audit are in place.
+
 ## Required adapter contract
 
 Each integration should define: stable ID/display name/category; adapter boundary; validated config schema; auth mechanism and scopes; capabilities; required permission level; health check; connect/disconnect/revoke lifecycle; timeout/retry/rate-limit policy; typed errors; redacted audit events; and mockable tests. Secrets belong in Windows Credential Manager/DPAPI-backed storage (or a reviewed keyring implementation), never source, config JSON, logs, prompts, reports, or Git. Approval is evaluated by the central policy layer, not by an agent prompt.
@@ -37,6 +41,14 @@ A future provider registry should make the selected mode authoritative for every
 4. Route each operation through capability policy, rate limiting, timeouts and user approval.
 5. Redact logs, store action/audit metadata without payloads or credentials, and surface failures.
 6. Disconnect by revoking token where supported and deleting local secret/session state after confirmation.
+
+## Gmail milestone gates
+
+1. Document official OAuth/API feasibility and the least-privilege scope for each read, label, draft and send operation.
+2. Implement Windows-appropriate secret storage, token revocation/disconnect, health state and redacted audit before account authorization.
+3. Begin with read/search/summarize and draft only; do not make real account calls during development without Cyrus's explicit instruction.
+4. Before sending, bind approval to the exact recipient, subject, body and attachment set; display all of them and reject execution if any value changes after approval.
+5. Test using mocks/fixtures first. Live account testing is a separate opt-in step and remains unapproved until Cyrus authorizes it.
 
 ## Unresolved design decisions
 

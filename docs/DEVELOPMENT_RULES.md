@@ -10,8 +10,8 @@ These rules apply to future changes to Ella and its user data. Preserve existing
 4. Avoid unrelated refactors and full-file rewrites. Preserve API/data compatibility where practical.
 5. Make the focused change; review the resulting diff for secrets, unrelated edits and user data.
 6. Update the source-of-truth documentation and changelog without rewriting historical memory to fit new conclusions.
-7. Provide a manual test checklist. Do not start/stop Ella, Ollama, integrations, accounts, browser automation, or tests without Cyrus's explicit instruction.
-8. Never push to GitHub or commit automatically. Do not install dependencies without direction.
+7. Provide a manual test checklist. Cyrus performs manual acceptance. Do not run tests, start/stop Ella or Ollama, perform inference, use browser automation, or test integrations/accounts on the user's behalf.
+8. Never commit, push, reset, checkout, or discard changes without Cyrus's explicit authorization. Do not install dependencies without direction.
 
 ## Python
 

@@ -2,6 +2,25 @@
 
 This log starts with the repository takeover documentation on 2026-11-04. It does not retroactively convert historical `RESULT.md` assertions into verified releases.
 
+## 2026-11-04 — Local startup, smoke checks, and runtime investigation
+
+- Started the committed Ella server for browser access after the owner requested it. The first page inspection showed an older server instance; after explicit approval, that identified instance was stopped and the committed server was launched.
+- After the restart, read-only browser/API smoke checks observed: page HTTP 200, unauthenticated `/api/state` HTTP 401, token-authorized state HTTP 200 with Local mode, and malformed JSON HTTP 400. These are narrow smoke checks, not a full regression/security acceptance.
+- The existing `tests/test_ella_chat.py` command was invoked after the owner said “test it,” but the command returned no captured result. **No pass/fail result is known; this is not recorded as a successful test run.**
+- A later read-only runtime inspection found two Python `server.py` processes and inconsistent/ambiguous port-8765 socket evidence. No process was stopped, restarted, or modified during that inspection. Correct single-instance ownership remains unresolved and is an immediate roadmap gate.
+
+## 2026-11-04 — Owner-confirmed Command Center blueprint
+
+- Aligned the master plan and roadmap with the confirmed hybrid/local-first, permission-bounded autonomy, preserved-bot coordination, Gmail-first integration and unified Command Center direction.
+- Added the Phase 1A–1E through Phase 14 sequence, the outstanding runtime-reliability gate, and progressive interface delivery order.
+- Reaffirmed that Cyrus performs manual acceptance and explicitly authorizes testing, service control, commits and pushes.
+- Clarified that these are product plans, not implemented capabilities; no application code, runtime data, tests, services or integrations were changed or run for this planning update.
+
+## 2026-11-04 — Ella check-in note
+
+- Appended a check-in session entry to the November 4 daily vault note. No application source or configuration changed in that commit.
+- Published as commit `d5f013e` (`Record Ella check-in session`).
+
 ## 2026-11-04 — Phase 1A local API security foundation
 
 - Added in-memory per-server API token delivery through the served HTML and token checks on all `/api/*` requests.
@@ -11,17 +30,25 @@ This log starts with the repository takeover documentation on 2026-11-04. It doe
 - Added raster container-signature and image-dimension checks, and audio container-signature checks before local decoders are invoked.
 - Added per-request header inactivity timeouts with controlled 408 handling, an overall bounded body-read deadline, and rejection of GET bodies to reduce slow-client thread retention and request desynchronization.
 - Hardened project UI rendering, image preview validation and external link protocols while preserving the existing frontend.
-- Updated the existing live-server test client to obtain the per-run token from the local HTML page; it was not executed and still performs inference/STT/TTS when Cyrus chooses to run it.
+- Updated the existing live-server test client to obtain the per-run token from the local HTML page. A later test invocation had no captured result; it remains a live/inference test and is not considered passed.
 - Updated security/API/current-state/bug/known-issue/manual-checklist documentation. No dependencies or runtime data changed.
-- **Not tested:** no tests, Ella/Ollama, browser flows, integrations, or inference were run. Cyrus must complete the manual checklist before Phase 1B.
+- **Implementation validation:** static diagnostics, Python syntax validation, project-config shape inspection and diff checks were completed. No full test result is claimed. Cyrus must complete the manual checklist before Phase 1B.
+
+## 2026-11-04 — Local model and hardware audit
+
+- Added `MODEL_HARDWARE_AUDIT.md` with read-only hardware inspection and installed Ollama model metadata/recommendations.
+- Recommended installed `llama3.2:3b` as the everyday/default candidate and `qwen2.5:7b` as the higher-capability installed option; no model/configuration was changed or downloaded.
+- Published with the documentation and Phase 1A work in commit `fb8e2c5` (`Harden Ella local API and document system audits`).
 
 ## 2026-11-04 — Repository takeover documentation
 
 - Verified repository root, `main` branch, GitHub origin, baseline commits and clean pre-edit worktree.
 - Added source-based current-state, architecture, bug/security, storage, API, integrations, development rules, decisions, roadmap and manual test documentation.
 - Updated `README.md` to reflect checked-in behavior and known configuration discrepancies.
+- Added `docs/ELLA_MASTER_PLAN.md`, `CURRENT_STATE.md`, `ARCHITECTURE.md`, `BUG_AUDIT.md`, `INTEGRATIONS.md`, `SECURITY.md`, `DATABASE_DESIGN.md`, `API_DESIGN.md`, `DEVELOPMENT_RULES.md`, `DECISIONS.md`, `ROADMAP.md`, `CHANGELOG.md`, `KNOWN_ISSUES.md` and `TEST_CHECKLIST.md`.
 - Preserved application code, UI, bots, profiles, skills, project config, vault and existing historical docs.
 - No application features, dependencies, runtime data or tests changed/run. Ella, Ollama and live integrations were not started or contacted.
+- Published with commit `fb8e2c5` (`Harden Ella local API and document system audits`).
 
 ## Historical notes (not release verification)
 
