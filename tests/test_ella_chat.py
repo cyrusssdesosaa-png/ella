@@ -1,6 +1,7 @@
 """Ella regression tests. Run against live server on 127.0.0.1:8765."""
 
 import json
+import re
 import time
 import urllib.request
 
@@ -8,13 +9,33 @@ BASE = "http://127.0.0.1:8765"
 PASS = 0
 FAIL = 0
 LOG = []
+_TOKEN = None
+
+
+def request_token():
+    global _TOKEN
+    if _TOKEN is None:
+        with urllib.request.urlopen(BASE, timeout=10) as response:
+            page = response.read().decode("utf-8")
+        match = re.search(r'<meta name="ella-request-token" content="([A-Za-z0-9_-]+)">', page)
+        if not match:
+            raise RuntimeError("Ella request token was not found in the local panel page")
+        _TOKEN = match.group(1)
+    return _TOKEN
+
+
+def api_headers(content_type):
+    return {
+        "Content-Type": content_type,
+        "X-Ella-Request-Token": request_token(),
+    }
 
 
 def ask(text):
     data = json.dumps({"text": text}).encode()
     req = urllib.request.Request(
         f"{BASE}/api/ask", data=data,
-        headers={"Content-Type": "application/json"},
+        headers=api_headers("application/json"),
     )
     t0 = time.monotonic()
     with urllib.request.urlopen(req, timeout=60) as r:
@@ -27,7 +48,7 @@ def tts(text):
     data = json.dumps({"text": text}).encode()
     req = urllib.request.Request(
         f"{BASE}/api/tts", data=data,
-        headers={"Content-Type": "application/json"},
+        headers=api_headers("application/json"),
     )
     t0 = time.monotonic()
     with urllib.request.urlopen(req, timeout=30) as r:
@@ -40,7 +61,7 @@ def tts(text):
 def stt(wav_bytes):
     req = urllib.request.Request(
         f"{BASE}/api/stt", data=wav_bytes,
-        headers={"Content-Type": "audio/wav"},
+        headers=api_headers("audio/wav"),
     )
     t0 = time.monotonic()
     with urllib.request.urlopen(req, timeout=60) as r:
@@ -118,7 +139,7 @@ check("tts: under 3s", t_tts < 3.0, f"{t_tts:.2f}s")
 
 # Feed TTS output back to STT
 tts_data = json.dumps({"text": "Testing one two three"}).encode()
-tts_req = urllib.request.Request(f"{BASE}/api/tts", data=tts_data, headers={"Content-Type": "application/json"})
+tts_req = urllib.request.Request(f"{BASE}/api/tts", data=tts_data, headers=api_headers("application/json"))
 with urllib.request.urlopen(tts_req, timeout=30) as resp:
     wav = resp.read()
 stt_r, t_stt = stt(wav)

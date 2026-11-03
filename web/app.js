@@ -39,6 +39,7 @@ let tick = 0;
 /* ---- DOM refs ---- */
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
+const API_TOKEN = document.querySelector('meta[name="ella-request-token"]')?.content || "";
 
 const orbCanvas = $("#orb");
 const octx = orbCanvas.getContext("2d");
@@ -58,8 +59,14 @@ const toastEl = $("#toast");
    API helpers (unchanged)
    ============================================================ */
 async function api(path, options) {
-  const res = await fetch(path, options);
-  const data = await res.json();
+  if (!API_TOKEN || API_TOKEN === "__ELLA_REQUEST_TOKEN__") {
+    throw new Error("Ella authorization is unavailable. Reload the panel from the local server.");
+  }
+  const headers = new Headers((options && options.headers) || {});
+  headers.set("X-Ella-Request-Token", API_TOKEN);
+  const res = await fetch(path, { ...(options || {}), headers });
+  let data = {};
+  try { data = await res.json(); } catch (_) {}
   if (!res.ok) throw new Error(data.error || res.statusText);
   return data;
 }
@@ -130,9 +137,21 @@ function addMessage(role, text, tag, tokens) {
 
   const meta = document.createElement("div");
   meta.className = "msg-meta";
-  meta.innerHTML = `<span>${time}</span>`;
-  if (tag) meta.innerHTML += `<span class="msg-tag">${tag}</span>`;
-  if (tokens) meta.innerHTML += `<span class="msg-tag">${fmtTok(tokens)} tok</span>`;
+  const timeEl = document.createElement("span");
+  timeEl.textContent = time;
+  meta.appendChild(timeEl);
+  if (tag) {
+    const tagEl = document.createElement("span");
+    tagEl.className = "msg-tag";
+    tagEl.textContent = tag;
+    meta.appendChild(tagEl);
+  }
+  if (tokens) {
+    const tokenEl = document.createElement("span");
+    tokenEl.className = "msg-tag";
+    tokenEl.textContent = `${fmtTok(tokens)} tok`;
+    meta.appendChild(tokenEl);
+  }
   const copyBtn = document.createElement("button");
   copyBtn.className = "msg-copy";
   copyBtn.textContent = "Copy";
@@ -243,10 +262,17 @@ async function speak(text) {
   try {
     const res = await fetch("/api/tts", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-Ella-Request-Token": API_TOKEN },
       body: JSON.stringify({ text: cleanForTTS(text).slice(0, 800) }),
     });
     const ct = res.headers.get("content-type") || "";
+    if (!res.ok) {
+      let data = {};
+      try { data = await res.json(); } catch (_) {}
+      showToast(data.error || "Speech synthesis is unavailable.");
+      setStatus("online");
+      return;
+    }
     if (ct.includes("audio")) {
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -305,7 +331,11 @@ async function sendAudio(blob) {
   setStatus("transcribing");
   say("Transcribing…");
   try {
-    const res = await fetch("/api/stt", { method: "POST", headers: { "Content-Type": blob.type || "audio/webm" }, body: blob });
+    const res = await fetch("/api/stt", {
+      method: "POST",
+      headers: { "Content-Type": blob.type || "audio/webm", "X-Ella-Request-Token": API_TOKEN },
+      body: blob,
+    });
     const data = await res.json();
     if (!data.ok) { say(data.error || "Couldn't understand that."); setStatus("online"); return; }
     chatInput.value = data.text;
@@ -429,7 +459,12 @@ function addImageMessage(dataUrl, filename) {
   const meta = document.createElement("div");
   meta.className = "msg-meta";
   const time = new Date().toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", hour12: true });
-  meta.innerHTML = `<span>${time}</span><span style="color:var(--text-dim)">${filename}</span>`;
+  const timeEl = document.createElement("span");
+  timeEl.textContent = time;
+  const filenameEl = document.createElement("span");
+  filenameEl.className = "file-label";
+  filenameEl.textContent = filename;
+  meta.append(timeEl, filenameEl);
   div.appendChild(meta);
   chatMessages.appendChild(div);
   chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -437,6 +472,17 @@ function addImageMessage(dataUrl, filename) {
 
 /* ---- Clipboard paste image (main chat) ---- */
 let pendingMainImage = null;
+const MAX_IMAGE_FILE_BYTES = 12 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
+
+function validImageFile(file) {
+  return !!file && ALLOWED_IMAGE_TYPES.has(file.type.toLowerCase()) && file.size > 0 && file.size <= MAX_IMAGE_FILE_BYTES;
+}
+
+function validImageDataUrl(value) {
+  return typeof value === "string" && value.length <= 16 * 1024 * 1024 + 128
+    && /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]*={0,2}$/i.test(value);
+}
 
 document.addEventListener("paste", (e) => {
   const items = (e.clipboardData || {}).items;
@@ -446,9 +492,10 @@ document.addEventListener("paste", (e) => {
     if (item.type.startsWith("image/")) {
       e.preventDefault();
       const file = item.getAsFile();
-      if (!file) return;
+      if (!validImageFile(file)) { showToast("Use a PNG, JPEG, or WebP image up to 12 MiB."); return; }
       const reader = new FileReader();
       reader.onload = () => {
+        if (!validImageDataUrl(reader.result)) { showToast("That image format or size is not supported."); return; }
         const el = document.activeElement;
         const projWin = el?.closest(".proj-win") || el?.closest(".proj-win-input");
         if (projWin) {
@@ -472,7 +519,13 @@ function showPastePreview(dataUrl) {
   if (!preview) {
     preview = document.createElement("div");
     preview.id = "pastePreview";
-    preview.innerHTML = `<img><button class="paste-remove" title="Remove">✕</button>`;
+    const img = document.createElement("img");
+    const remove = document.createElement("button");
+    remove.className = "paste-remove";
+    remove.type = "button";
+    remove.title = "Remove";
+    remove.textContent = "✕";
+    preview.append(img, remove);
     $("#inputForm").parentElement.insertBefore(preview, $("#inputForm"));
     preview.querySelector(".paste-remove").addEventListener("click", () => {
       pendingMainImage = null;
@@ -498,7 +551,15 @@ function handleProjectPaste(inputArea, dataUrl) {
   if (existing) existing.remove();
   const preview = document.createElement("div");
   preview.className = "pw-paste-preview";
-  preview.innerHTML = `<img src="${dataUrl}" style="max-width:120px;max-height:80px;border-radius:6px;"><button class="pw-paste-x" title="Remove">✕</button>`;
+  const img = document.createElement("img");
+  img.src = dataUrl;
+  img.style.cssText = "max-width:120px;max-height:80px;border-radius:6px;";
+  const remove = document.createElement("button");
+  remove.className = "pw-paste-x";
+  remove.type = "button";
+  remove.title = "Remove";
+  remove.textContent = "✕";
+  preview.append(img, remove);
   inputArea.insertBefore(preview, inputArea.firstChild);
   preview.querySelector(".pw-paste-x").addEventListener("click", () => { preview.remove(); state._pendingImg = null; });
   state._pendingImg = dataUrl;
@@ -758,7 +819,7 @@ function layoutGraph(notes) {
     color: COLORS[(notes.find((n) => n.folder === f) || {}).category] || COLORS.Notes,
   })).sort((a, b) => b.count - a.count).slice(0, 8);
   $("#hubList").innerHTML = hubs.map((h) =>
-    `<div class="hub-row"><span class="hub-dot" style="background:${h.color}"></span>${h.folder}<span class="hub-count">${h.count}</span></div>`
+    `<div class="hub-row"><span class="hub-dot" style="background:${safeProjectColor(h.color)}"></span>${escapeHtml(h.folder)}<span class="hub-count">${h.count}</span></div>`
   ).join("");
 }
 
@@ -940,7 +1001,12 @@ function tokLevel(pct) {
   return "ok";
 }
 function escapeHtml(s) {
-  return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return String(s || "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[char]);
+}
+function safeProjectColor(value) {
+  return /^#[0-9a-f]{6}$/i.test(String(value || "")) ? value : "#4a7fe0";
 }
 function shortTime(iso) {
   if (!iso) return "";
@@ -996,14 +1062,16 @@ function renderHealth() {
   const stats = $("#healthStats");
   if (stats) {
     const session = (totals.prompt || 0) + (totals.completion || 0);
+    const callsCount = Number(totals.calls) || 0;
+    const tokensPerSecond = Number(last.tps);
     const cards = [
       ["Prompt", fmtTok(totals.prompt), "tokens in"],
       ["Reply", fmtTok(totals.completion), "tokens out"],
-      ["Session", fmtTok(session), `${totals.calls || 0} calls · $0.00`],
-      ["Speed", last.tps ? `${last.tps}/s` : "—", last.provider || "waiting"],
+      ["Session", fmtTok(session), `${callsCount} calls · $0.00`],
+      ["Speed", Number.isFinite(tokensPerSecond) && tokensPerSecond > 0 ? `${tokensPerSecond}/s` : "—", last.provider || "waiting"],
     ];
     stats.innerHTML = cards.map(([k, v, s]) =>
-      `<div class="stat-card"><span>${k}</span><strong>${v}</strong><em>${s}</em></div>`
+      `<div class="stat-card"><span>${escapeHtml(k)}</span><strong>${escapeHtml(v)}</strong><em>${escapeHtml(s)}</em></div>`
     ).join("");
   }
   const calls = $("#healthCalls");
@@ -1106,14 +1174,15 @@ $("#projOverlay").addEventListener("click", () => $("#projLauncher").classList.a
 function renderLauncher() {
   const grid = $("#projGrid");
   grid.innerHTML = projectConfigs.map((p) => {
+    const color = safeProjectColor(p.color);
     const linkCount = (p.links || []).length;
     const badge = linkCount ? `<span class="proj-card-links" title="${linkCount} linked resources">📎${linkCount}</span>` : "";
     return `
-    <div class="proj-card" data-pid="${p.id}" style="border-color: ${p.color}22;">
-      <span class="proj-card-icon">${p.icon || "📁"}</span>
-      <span class="proj-card-name">${p.name}</span>
+    <div class="proj-card" data-pid="${escapeHtml(p.id)}" style="border-color: ${color}22;">
+      <span class="proj-card-icon">${escapeHtml(p.icon || "📁")}</span>
+      <span class="proj-card-name">${escapeHtml(p.name)}</span>
       <div class="proj-card-foot">
-        <span class="proj-card-status" style="background: ${p.color};"></span>
+        <span class="proj-card-status" style="background: ${color};"></span>
         ${badge}
       </div>
     </div>`;
@@ -1144,6 +1213,7 @@ async function openProjectWindow(pid) {
 
   const proj = projectConfigs.find((p) => p.id === pid);
   if (!proj) return;
+  const color = safeProjectColor(proj.color);
 
   let session;
   try {
@@ -1151,22 +1221,26 @@ async function openProjectWindow(pid) {
     session = data.session || { messages: [] };
   } catch (_) { session = { messages: [] }; }
 
-  const saved = JSON.parse(localStorage.getItem("projWinPos_" + pid) || "null");
-  const x = saved?.x ?? 200 + Object.keys(openProjectWindows).length * 30;
-  const y = saved?.y ?? 100 + Object.keys(openProjectWindows).length * 20;
-  const w = saved?.w ?? 440;
-  const h = saved?.h ?? 480;
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem("projWinPos_" + pid) || "null"); } catch (_) {}
+  const storedNumber = (value, fallback, min, max) => {
+    const number = Number(value);
+    return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : fallback;
+  };
+  const x = storedNumber(saved?.x, 200 + Object.keys(openProjectWindows).length * 30, -window.innerWidth, window.innerWidth);
+  const y = storedNumber(saved?.y, 100 + Object.keys(openProjectWindows).length * 20, 0, window.innerHeight);
+  const w = storedNumber(saved?.w, 440, 280, Math.max(280, window.innerWidth));
+  const h = storedNumber(saved?.h, 480, 300, Math.max(300, window.innerHeight));
 
   const customActions = (proj.actions || []).slice(0, 4);
   const actionsHtml = customActions.length
-    ? customActions.map((a, i) => `<button class="proj-action" data-idx="${i}">${a.label}</button>`).join("")
+    ? customActions.map((a, i) => `<button class="proj-action" data-idx="${i}">${escapeHtml(a.label)}</button>`).join("")
     : `<button class="proj-action" data-act="status">Status</button><button class="proj-action" data-act="continue">Continue</button><button class="proj-action" data-act="tasks">Tasks</button>`;
 
   const linksArr = proj.links || [];
-  const esc = (s) => (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
   const linksHtml = linksArr.map((lnk, i) => `
     <div class="pw-link-row" data-li="${i}">
-      <span class="pw-link-label" title="${esc(lnk.url)}">${esc(lnk.label || lnk.url || "Link")}</span>
+      <span class="pw-link-label" title="${escapeHtml(lnk.url)}">${escapeHtml(lnk.label || lnk.url || "Link")}</span>
       <button class="pw-link-open" title="Open">↗</button>
       <button class="pw-link-del" title="Remove">✕</button>
     </div>`).join("");
@@ -1176,9 +1250,9 @@ async function openProjectWindow(pid) {
   win.style.cssText = `left:${x}px;top:${y}px;width:${w}px;height:${h}px;z-index:${++projectZIndex};`;
   win.innerHTML = `
     <div class="proj-win-header">
-      <span class="proj-win-icon">${proj.icon || "📁"}</span>
-      <span class="proj-win-name">${proj.name}</span>
-      <span class="proj-win-dot" style="background:${proj.color};box-shadow:0 0 4px ${proj.color};"></span>
+      <span class="proj-win-icon">${escapeHtml(proj.icon || "📁")}</span>
+      <span class="proj-win-name">${escapeHtml(proj.name)}</span>
+      <span class="proj-win-dot" style="background:${color};box-shadow:0 0 4px ${color};"></span>
       <button class="proj-win-btn pw-links-toggle" title="Links" style="font-size:12px;">📎</button>
       <button class="proj-win-btn pw-clear" title="Clear chat">🗑</button>
       <button class="proj-win-btn pw-min" title="Minimize">─</button>
@@ -1195,8 +1269,8 @@ async function openProjectWindow(pid) {
     <div class="proj-win-actions">${actionsHtml}</div>
     <div class="proj-win-chat"></div>
     <div class="proj-win-input">
-      <input type="text" placeholder="Ask ${proj.name}..." autocomplete="off">
-      <input type="file" class="pw-file-input" accept="image/*" style="display:none">
+      <input type="text" placeholder="Ask ${escapeHtml(proj.name)}..." autocomplete="off">
+      <input type="file" class="pw-file-input" accept="image/png,image/jpeg,image/webp" style="display:none">
       <button class="attach-btn pw-attach" title="Attach image">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
       </button>
@@ -1281,9 +1355,11 @@ async function openProjectWindow(pid) {
   fileInput.addEventListener("change", () => {
     const file = fileInput.files[0];
     if (!file) return;
+    if (!validImageFile(file)) { showToast("Use a PNG, JPEG, or WebP image up to 12 MiB."); fileInput.value = ""; return; }
     const reader = new FileReader();
     reader.onload = () => {
       const base64 = reader.result;
+      if (!validImageDataUrl(base64)) { showToast("That image format or size is not supported."); return; }
       addProjectImg(chatEl, "user", file.name, base64, proj);
       const caption = inputEl.value.trim() || "What do you see in this image?";
       inputEl.value = "";
@@ -1324,7 +1400,7 @@ async function openProjectWindow(pid) {
     const currentLinks = proj.links || [];
     list.innerHTML = currentLinks.map((lnk, i) => `
       <div class="pw-link-row" data-li="${i}">
-        <span class="pw-link-label" title="${esc(lnk.url)}">${esc(lnk.label || lnk.url || "Link")}</span>
+        <span class="pw-link-label" title="${escapeHtml(lnk.url)}">${escapeHtml(lnk.label || lnk.url || "Link")}</span>
         <button class="pw-link-open" title="Open">↗</button>
         <button class="pw-link-del" title="Remove">✕</button>
       </div>`).join("");
@@ -1337,8 +1413,11 @@ async function openProjectWindow(pid) {
         const idx = parseInt(btn.closest(".pw-link-row").dataset.li);
         const lnk = (proj.links || [])[idx];
         if (lnk && lnk.url) {
-          if (lnk.url.startsWith("http")) window.open(lnk.url, "_blank");
-          else inputEl.value = `Open ${lnk.url}`;
+          let target;
+          try { target = new URL(lnk.url); } catch (_) { target = null; }
+          if (target && ["http:", "https:"].includes(target.protocol)) {
+            window.open(target.href, "_blank", "noopener,noreferrer");
+          } else inputEl.value = `Open ${lnk.url}`;
         }
       });
     });
@@ -1391,9 +1470,24 @@ function addProjectMsg(chatEl, role, text, proj, tokens) {
   const meta = document.createElement("div");
   meta.className = "msg-meta";
   const time = new Date().toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", hour12: true });
-  meta.innerHTML = `<span>${time}</span>`;
-  if (role === "ella") meta.innerHTML += `<span class="msg-tag" style="background:${proj.color}22;color:${proj.color};">${proj.name}</span>`;
-  if (tokens) meta.innerHTML += `<span class="msg-tag">${fmtTok(tokens)} tok</span>`;
+  const timeEl = document.createElement("span");
+  timeEl.textContent = time;
+  meta.appendChild(timeEl);
+  if (role === "ella") {
+    const tag = document.createElement("span");
+    const color = safeProjectColor(proj.color);
+    tag.className = "msg-tag";
+    tag.style.background = `${color}22`;
+    tag.style.color = color;
+    tag.textContent = proj.name;
+    meta.appendChild(tag);
+  }
+  if (tokens) {
+    const tokenEl = document.createElement("span");
+    tokenEl.className = "msg-tag";
+    tokenEl.textContent = `${fmtTok(tokens)} tok`;
+    meta.appendChild(tokenEl);
+  }
   if (role === "ella") {
     const copyBtn = document.createElement("button");
     copyBtn.className = "msg-copy";
@@ -1419,7 +1513,12 @@ function addProjectImg(chatEl, role, filename, dataUrl, proj) {
   const meta = document.createElement("div");
   meta.className = "msg-meta";
   const time = new Date().toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", hour12: true });
-  meta.innerHTML = `<span>${time}</span><span style="color:var(--text-dim)">${filename}</span>`;
+  const timeEl = document.createElement("span");
+  timeEl.textContent = time;
+  const filenameEl = document.createElement("span");
+  filenameEl.className = "file-label";
+  filenameEl.textContent = filename;
+  meta.append(timeEl, filenameEl);
   div.appendChild(meta);
   chatEl.appendChild(div);
   chatEl.scrollTop = chatEl.scrollHeight;
@@ -1428,7 +1527,14 @@ function addProjectImg(chatEl, role, filename, dataUrl, proj) {
 function addThinkingDot(chatEl, proj) {
   const div = document.createElement("div");
   div.className = "msg msg-ella proj-thinking";
-  div.innerHTML = `<div class="msg-body"><span class="thinking-dots" style="color:${proj.color}">● ● ●</span></div>`;
+  const body = document.createElement("div");
+  body.className = "msg-body";
+  const dots = document.createElement("span");
+  dots.className = "thinking-dots";
+  dots.style.color = safeProjectColor(proj.color);
+  dots.textContent = "● ● ●";
+  body.appendChild(dots);
+  div.appendChild(body);
   chatEl.appendChild(div);
   chatEl.scrollTop = chatEl.scrollHeight;
   return div;
@@ -1477,11 +1583,15 @@ function renderMiniChips() {
     const state = openProjectWindows[pid];
     const chip = document.createElement("div");
     chip.className = "mini-chip";
-    chip.innerHTML = `
-      <span class="mini-chip-icon">${proj.icon || "📁"}</span>
-      <span>${proj.name}</span>
-      <span class="mini-chip-badge">${state?.unread || ""}</span>
-    `;
+    const icon = document.createElement("span");
+    icon.className = "mini-chip-icon";
+    icon.textContent = proj.icon || "📁";
+    const name = document.createElement("span");
+    name.textContent = proj.name;
+    const badge = document.createElement("span");
+    badge.className = "mini-chip-badge";
+    badge.textContent = state?.unread || "";
+    chip.append(icon, name, badge);
     chip.addEventListener("click", () => {
       minimizedProjects.delete(pid);
       if (state) { state.el.classList.remove("hidden"); state.el.style.zIndex = ++projectZIndex; state.unread = 0; }
@@ -1531,27 +1641,28 @@ function renderDashboard() {
   const q = ($("#dashFilter") && $("#dashFilter").value || "").trim().toLowerCase();
   const list = projectConfigs.filter((p) => !q || (p.name || "").toLowerCase().includes(q) || (p.id || "").includes(q));
   container.innerHTML = list.map(p => {
+    const color = safeProjectColor(p.color);
     const linkCount = (p.links || []).length;
     const isOpen = !!openProjectWindows[p.id];
     const isMin = minimizedProjects.has(p.id);
     const statusText = isOpen ? (isMin ? "Minimized" : "Open") : "Closed";
     const statusClass = isOpen ? (isMin ? "dash-min" : "dash-open") : "dash-closed";
     return `
-      <div class="dash-card" data-pid="${p.id}" data-name="${(p.name || "").toLowerCase()}" style="--accent:${p.color}">
+      <div class="dash-card" data-pid="${escapeHtml(p.id)}" data-name="${escapeHtml((p.name || "").toLowerCase())}" style="--accent:${color}">
         <div class="dash-card-top">
-          <span class="dash-card-icon">${p.icon || "📁"}</span>
+          <span class="dash-card-icon">${escapeHtml(p.icon || "📁")}</span>
           <div class="dash-card-info">
-            <span class="dash-card-name">${p.name}</span>
+            <span class="dash-card-name">${escapeHtml(p.name)}</span>
             <span class="dash-card-status ${statusClass}">${statusText}</span>
           </div>
-          <span class="dash-card-dot" style="background:${p.color};box-shadow:0 0 6px ${p.color};"></span>
+          <span class="dash-card-dot" style="background:${color};box-shadow:0 0 6px ${color};"></span>
         </div>
         <div class="dash-card-meta">
           ${linkCount ? `<span class="dash-meta-item">📎 ${linkCount} link${linkCount > 1 ? "s" : ""}</span>` : ""}
-          ${p.path ? `<span class="dash-meta-item" title="${p.path}">📂 ${p.path.split("\\").pop()}</span>` : ""}
+          ${p.path ? `<span class="dash-meta-item" title="${escapeHtml(p.path)}">📂 ${escapeHtml(p.path.split("\\").pop())}</span>` : ""}
         </div>
         <div class="dash-card-actions">
-          <button class="dash-open-btn" data-pid="${p.id}">Open</button>
+          <button class="dash-open-btn" data-pid="${escapeHtml(p.id)}">Open</button>
         </div>
       </div>`;
   }).join("");
