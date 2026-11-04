@@ -20,6 +20,7 @@ const GREETINGS = [
 /* ---- State ---- */
 let brain = { mode: "local", model: "qwen2.5:7b" };
 let conversationMode = false;
+let currentNav = "dashboard";
 let currentView = "home";
 let chatHistory = [];
 let rec = null;
@@ -95,15 +96,26 @@ setInterval(updateClock, 30000);
 /* ============================================================
    View switching
    ============================================================ */
+const VIEW_ALIASES = {
+  dashboard: "home", chat: "home", projects: "tasks",
+  bots: "bots", tasks: "tasksExec", automations: "automations",
+  inbox: "inbox", integrations: "integrations", memory: "brain",
+  approvals: "approvals", activity: "inbox", system: "health",
+  settings: "settings",
+};
+
 function switchView(name) {
-  currentView = name;
+  currentNav = name;
+  const resolved = VIEW_ALIASES[name] || name;
+  currentView = resolved;
   $$(".view").forEach((v) => v.classList.remove("active"));
-  const view = $(`#${name}View`);
+  const view = $(`#${resolved}View`);
   if (view) view.classList.add("active");
   $$(".rail-btn").forEach((b) => {
     b.classList.toggle("active", b.dataset.view === name);
   });
-  if (name === "brain") requestAnimationFrame(() => resizeBrainCanvas());
+  if (resolved === "brain") requestAnimationFrame(() => resizeBrainCanvas());
+  if (resolved === "home") resizeAmbient();
 }
 $$(".rail-btn").forEach((btn) => {
   btn.addEventListener("click", () => switchView(btn.dataset.view));
@@ -1686,7 +1698,17 @@ $("#tokenPill").addEventListener("click", () => switchView("health"));
 const origSwitchView = switchView;
 switchView = function(name) {
   origSwitchView(name);
-  if (name === "tasks" || name === "health" || name === "inbox") refreshPanel();
+  if (name === "tasks" || name === "health" || name === "inbox" || name === "projects" || name === "system" || name === "activity" || name === "memory") refreshPanel();
 };
 
 boot();
+
+/* Rail expand/collapse */
+const railToggle = $("#railToggle");
+if (railToggle) {
+  railToggle.addEventListener("click", () => {
+    const rail = $("#rail");
+    const expanded = rail.classList.toggle("expanded");
+    railToggle.setAttribute("aria-expanded", String(expanded));
+  });
+}

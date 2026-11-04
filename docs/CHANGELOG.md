@@ -1,6 +1,16 @@
 # Changelog
 
 This log starts with the repository takeover documentation on 2026-11-04. It does not retroactively convert historical `RESULT.md` assertions into verified releases.
+## 2026-11-04 — UI-1 Command Center shell and navigation (uncommitted)
+
+- Added a grouped 13-destination Command Center navigation rail to `web/index.html`: Dashboard, Ella Chat, Projects, Bots, Tasks, Automations, Inbox, Integrations, Memory, Approvals, Activity, System Monitor, and Settings.
+- Added placeholder views for Bots, Tasks, Automations, Integrations, and Approvals. Existing views are reused for Dashboard/Ella Chat, Projects, Memory, Inbox/Activity, System Monitor, and Settings.
+- Added UI-1 styling in `web/styles.css` for rail grouping/labels, expand/collapse, page headers, placeholder panels, status badges, responsive breakpoints, and topbar height adjustment.
+- Added view-alias handling and rail toggle behavior in `web/app.js`; no backend routes, authentication, or security behavior changed.
+- No runtime data, bot configurations, profiles, skills, vault contents, dependencies, or backend source were changed. No tests, services, model inference, commits, or pushes were performed.
+- Bot execution, task management, automation, integrations, approvals, hardware monitoring, and full Command Center data integration remain future work.
+
+
 
 ## 2026-11-04 — Local startup, smoke checks, and runtime investigation
 

@@ -9,9 +9,18 @@ This document records what repository code supports. It does not claim the machi
 
 - Root: `D:\ella`; Git root is this directory.
 - Branch: `main`, tracking `origin/main` at `https://github.com/cyrusssdesosaa-png/ella`.
-- Baseline HEAD: `6fcc105` (`Note the private GitHub home in the panel inventory`), preceded by `a0cb05d` (`Add Ella and the files it needs to run`).
+- Baseline HEAD: `e7da87e` (`Document Ella development history and blueprint`), preceded by `d5f013e` (`Record Ella check-in session`) and `fb8e2c5` (`Harden Ella local API and document system audits`). UI-1 frontend work is currently uncommitted in the working tree.
 - Initial audit working tree was clean. No ignored runtime files were present; no `.env`, `data/`, or backup archive was in the worktree. Documentation edits made for this takeover are described in `docs/CHANGELOG.md`.
 - No separate root `docs/` folder existed before this documentation set. The repository has one live-server test script, inspected but not run; its API helpers now obtain the per-process token from the served page.
+
+## UI-1 Command Center shell (uncommitted frontend work)
+
+- Added a grouped 13-destination Command Center navigation rail in `web/index.html`: Dashboard, Ella Chat, Projects, Bots, Tasks, Automations, Inbox, Integrations, Memory, Approvals, Activity, System Monitor, and Settings.
+- Added placeholder views for Bots, Tasks, Automations, Integrations, and Approvals. Existing views are reused for Dashboard/Ella Chat, Projects, Memory, Inbox/Activity, System Monitor, and Settings.
+- Added styling in `web/styles.css` for rail grouping, labels, expand/collapse, page headers, placeholder panels, status badges, responsive breakpoints, and topbar height adjustment.
+- Added view-alias handling in `web/app.js`; no backend routes or security behavior changed.
+- No task, automation, integration, approval, bot-runtime, hardware-monitoring, or full Command Center data integration is implemented. Placeholder pages state their unimplemented status.
+
 
 ## Actual components
 

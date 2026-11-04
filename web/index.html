@@ -39,26 +39,71 @@
   </header>
 
   <!-- LEFT RAIL -->
-  <nav id="rail">
-    <button class="rail-btn active" data-view="home" title="Home">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/></svg>
+  <nav id="rail" aria-label="Command Center navigation">
+    <button class="rail-toggle" id="railToggle" type="button" title="Toggle navigation labels" aria-expanded="false" aria-controls="rail">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
     </button>
-    <button class="rail-btn" data-view="inbox" title="Inbox">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-6l-2 3H10l-2-3H2"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg>
-    </button>
-    <button class="rail-btn" data-view="tasks" title="Tasks">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
-    </button>
-    <button class="rail-btn" data-view="brain" title="Brain Graph">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/><line x1="12" y1="8" x2="5" y2="16"/><line x1="12" y1="8" x2="19" y2="16"/><line x1="5" y1="19" x2="19" y2="19"/></svg>
-    </button>
-    <button class="rail-btn" data-view="health" title="Health">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-    </button>
-    <div class="rail-spacer"></div>
-    <button class="rail-btn" data-view="settings" title="Settings">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-    </button>
+    <div class="rail-group">
+      <div class="rail-group-label">Workspace</div>
+      <button class="rail-btn active" data-view="dashboard" title="Dashboard">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/></svg>
+        <span class="rail-label">Dashboard</span>
+      </button>
+      <button class="rail-btn" data-view="chat" title="Ella Chat">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+        <span class="rail-label">Ella Chat</span>
+      </button>
+      <button class="rail-btn" data-view="projects" title="Projects">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        <span class="rail-label">Projects</span>
+      </button>
+      <button class="rail-btn" data-view="bots" title="Bots">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M12 8V4"/><circle cx="12" cy="3" r="1"/><circle cx="9" cy="14" r="1.5"/><circle cx="15" cy="14" r="1.5"/></svg>
+        <span class="rail-label">Bots</span>
+      </button>
+      <button class="rail-btn" data-view="tasks" title="Tasks">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+        <span class="rail-label">Tasks</span>
+      </button>
+      <button class="rail-btn" data-view="automations" title="Automations">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-9-9"/><path d="M21 3v6h-6"/></svg>
+        <span class="rail-label">Automations</span>
+      </button>
+    </div>
+    <div class="rail-group">
+      <div class="rail-group-label">Management</div>
+      <button class="rail-btn" data-view="inbox" title="Inbox">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-6l-2 3H10l-2-3H2"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg>
+        <span class="rail-label">Inbox</span>
+      </button>
+      <button class="rail-btn" data-view="integrations" title="Integrations">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+        <span class="rail-label">Integrations</span>
+      </button>
+      <button class="rail-btn" data-view="memory" title="Memory">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/><line x1="12" y1="8" x2="5" y2="16"/><line x1="12" y1="8" x2="19" y2="16"/><line x1="5" y1="19" x2="19" y2="19"/></svg>
+        <span class="rail-label">Memory</span>
+      </button>
+      <button class="rail-btn" data-view="approvals" title="Approvals">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+        <span class="rail-label">Approvals</span>
+      </button>
+      <button class="rail-btn" data-view="activity" title="Activity">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        <span class="rail-label">Activity</span>
+      </button>
+    </div>
+    <div class="rail-group">
+      <div class="rail-group-label">System</div>
+      <button class="rail-btn" data-view="system" title="System Monitor">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+        <span class="rail-label">System Monitor</span>
+      </button>
+      <button class="rail-btn" data-view="settings" title="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        <span class="rail-label">Settings</span>
+      </button>
+    </div>
   </nav>
 
   <!-- HOME VIEW -->
@@ -128,7 +173,7 @@
   <!-- PLACEHOLDER VIEWS -->
   <div id="inboxView" class="view">
     <div class="dashboard-page">
-      <h2 class="dashboard-title">Activity</h2>
+      <h2 class="dashboard-title">Inbox & Activity</h2>
       <div class="activity-list" id="activityList"></div>
     </div>
   </div>
@@ -185,6 +230,77 @@
     </div>
   </div>
 
+  <!-- COMMAND CENTER PLACEHOLDER VIEWS -->
+  <div id="botsView" class="view">
+    <div class="dashboard-page cc-page">
+      <header class="page-header">
+        <h2 class="page-title">Bots</h2>
+        <p class="page-subtitle">Registered project bots are available, but autonomous execution and runtime status monitoring are not yet implemented.</p>
+      </header>
+      <section class="glass placeholder-panel">
+        <div class="placeholder-icon" aria-hidden="true">&#9881;</div>
+        <h3>Bot Management Center</h3>
+        <p>Bot configurations are preserved. Runtime status, delegation, and execution monitoring will be introduced in a future phase.</p>
+        <div class="placeholder-status">Status: Configuration available &middot; Runtime monitoring: Not implemented</div>
+      </section>
+    </div>
+  </div>
+  <div id="tasksExecView" class="view">
+    <div class="dashboard-page cc-page">
+      <header class="page-header">
+        <h2 class="page-title">Tasks</h2>
+        <p class="page-subtitle">Task execution and lifecycle management will be introduced in a future development phase.</p>
+      </header>
+      <section class="glass placeholder-panel">
+        <div class="placeholder-icon" aria-hidden="true">&#9745;</div>
+        <h3>Task Center</h3>
+        <p>No task queue or lifecycle engine exists yet. Task progress and cancellation will be added in a future phase.</p>
+        <div class="placeholder-status">Status: Not implemented</div>
+      </section>
+    </div>
+  </div>
+  <div id="automationsView" class="view">
+    <div class="dashboard-page cc-page">
+      <header class="page-header">
+        <h2 class="page-title">Automations</h2>
+        <p class="page-subtitle">Scheduled workflows and automation management are not yet implemented.</p>
+      </header>
+      <section class="glass placeholder-panel">
+        <div class="placeholder-icon" aria-hidden="true">&#8635;</div>
+        <h3>Automation Center</h3>
+        <p>Scheduled triggers, conditions, and run history are not available in the current backend.</p>
+        <div class="placeholder-status">Status: Not implemented</div>
+      </section>
+    </div>
+  </div>
+  <div id="integrationsView" class="view">
+    <div class="dashboard-page cc-page">
+      <header class="page-header">
+        <h2 class="page-title">Integrations</h2>
+        <p class="page-subtitle">External service connection management will be introduced in a future phase.</p>
+      </header>
+      <section class="glass placeholder-panel">
+        <div class="placeholder-icon" aria-hidden="true">&#128268;</div>
+        <h3>Integration Center</h3>
+        <p>Ollama, OpenRouter, and Groq are configured in the backend. A full integration framework is not yet implemented.</p>
+        <div class="placeholder-status">Status: Partial &middot; Framework: Not implemented</div>
+      </section>
+    </div>
+  </div>
+  <div id="approvalsView" class="view">
+    <div class="dashboard-page cc-page">
+      <header class="page-header">
+        <h2 class="page-title">Approvals</h2>
+        <p class="page-subtitle">Actions requiring user approval will be managed here once the approval system is implemented.</p>
+      </header>
+      <section class="glass placeholder-panel">
+        <div class="placeholder-icon" aria-hidden="true">&#128737;</div>
+        <h3>Approval Center</h3>
+        <p>No approval queue exists yet. Action-bound approvals will be introduced in a future phase.</p>
+        <div class="placeholder-status">Status: Not implemented</div>
+      </section>
+    </div>
+  </div>
   <!-- MINIMIZED PROJECT CHIPS -->
   <div id="miniChips"></div>
 
