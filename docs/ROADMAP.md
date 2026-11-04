@@ -35,7 +35,7 @@ Before adding new intelligence, tools, or dashboard claims:
 | 9 | Calendar and Drive | Official API/OAuth and explicit scopes; truthful connection/health and approval for mutations. | Not implemented. |
 | 10 | GitHub and project workspace | Authorized repo/project context, source-backed tasks and project-specific isolation. | Not implemented as an integration/workspace service. |
 | 11 | Automation engine | Schedules/triggers, conditions, assigned bot, scope, run history, retry/cancel and immediate revoke/override. | Not implemented beyond selected synchronous routines. |
-| 12 | Expanded Command Center interface | Extend the existing vanilla app with real dashboard, nav shell, collapsible context panel, bots/tasks/automations/inbox/integrations/memory/approvals/activity/system/settings. | Partial existing panel only; UI-1 Command Center shell/navigation implemented in frontend (uncommitted), backend-dependent views remain future work. |
+| 12 | Expanded Command Center interface | Extend the existing vanilla app with real dashboard, nav shell, collapsible context panel, bots/tasks/automations/inbox/integrations/memory/approvals/activity/system/settings. | UI-1 Command Center shell/navigation implemented in frontend (committed `753225f` on `main`); backend-dependent views remain future work. |
 | 13 | Advanced bot coordination | Delegation, result evaluation, consolidated response and permission-preserving bot-to-bot coordination through Ella. | Planned; depends on Phases 3, 4 and 6. |
 | 14 | Maintenance, recovery and optimization | Bounded watchdog, backups/recovery drills, dependency/security upkeep, measurable resource baselines and release discipline. | Planned. |
 
