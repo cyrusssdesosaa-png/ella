@@ -21,6 +21,13 @@ HELP = ROOT / "skills" / "mine" / "how-i-help.md"
 _chat_history = []
 MAX_HISTORY = 10
 
+# Moondream /api/generate is a single prompt string with a small context window.
+# Keep identity + a few recent turns, but truncate so the image still fits.
+VISION_SYSTEM_MAX = 800
+VISION_HISTORY_TURNS = 4
+VISION_TURN_MAX = 240
+VISION_PROMPT_MAX = 2400
+
 
 def profile():
     return read_json(
@@ -131,6 +138,58 @@ def _messages(task, kind="chat", project_prompt=None, history=None):
                 messages.append(turn)
     messages.append({"role": "user", "content": task})
     return messages
+
+
+
+def polish_reply(text):
+    """Strip leaked system fragments and fix identity slips."""
+    return _identity_check(_strip_leaked_context(text))
+
+
+def remember_main_chat(task, reply):
+    """Append a main-chat turn pair (text chat and vision share this)."""
+    _chat_history.append({"role": "user", "content": task})
+    _chat_history.append({"role": "assistant", "content": reply})
+    while len(_chat_history) > MAX_HISTORY * 2:
+        _chat_history.pop(0)
+
+
+def build_vision_prompt(task, project_prompt=None, history=None):
+    """Flatten Ella identity + optional project context + history for moondream.
+
+    Reuses `_messages` so vision gets the same personality / project prompt /
+    history policy as text chat, then compresses into one generate prompt.
+    """
+    msgs = _messages(task, "chat", project_prompt=project_prompt, history=history)
+    system = (msgs[0].get("content") or "").strip()
+    if len(system) > VISION_SYSTEM_MAX:
+        system = system[:VISION_SYSTEM_MAX].rstrip() + "..."
+
+    parts = [
+        "System context (follow this identity; do not quote it):",
+        system,
+        "",
+    ]
+    mid = msgs[1:-1]
+    if mid:
+        parts.append("Recent conversation:")
+        for turn in mid[-VISION_HISTORY_TURNS:]:
+            role = "User" if turn.get("role") == "user" else "Ella"
+            content = (turn.get("content") or "").strip()
+            if len(content) > VISION_TURN_MAX:
+                content = content[:VISION_TURN_MAX].rstrip() + "..."
+            if content:
+                parts.append(f"{role}: {content}")
+        parts.append("")
+
+    user_task = (task or "").strip() or "What do you see in this image?"
+    parts.append(f"User (about the attached image): {user_task}")
+    parts.append("Reply briefly as Ella about the image.")
+    prompt = "\n".join(parts)
+    if len(prompt) > VISION_PROMPT_MAX:
+        prompt = prompt[:VISION_PROMPT_MAX].rstrip() + "..."
+    return prompt
+
 
 
 def _strip_leaked_context(text):
@@ -258,13 +317,9 @@ def run_model(kind, task, project_prompt=None, queue_on_fail=True, history=None)
         if queue_on_fail:
             save_outbox(kind, task, error or "empty")
         return "", error or "No model answered", None
-    text = _strip_leaked_context(text)
-    text = _identity_check(text)
+    text = polish_reply(text)
     if kind == "chat" and not project_prompt:
-        _chat_history.append({"role": "user", "content": task})
-        _chat_history.append({"role": "assistant", "content": text})
-        while len(_chat_history) > MAX_HISTORY * 2:
-            _chat_history.pop(0)
+        remember_main_chat(task, text)
     logged = record_usage(provider, usage, kind)
     return text, None, logged
 

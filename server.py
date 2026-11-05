@@ -19,7 +19,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from projects import list_projects
-from routines import STOPPED, adapt, check_in, profile, record_usage, retry_outbox, run_model, scout_now, usage_summary
+from routines import STOPPED, adapt, build_vision_prompt, check_in, polish_reply, profile, record_usage, remember_main_chat, retry_outbox, run_model, scout_now, usage_summary
 from router import load_env, ollama_models
 import cancel
 from vault import find_note, graph, today_text
@@ -380,6 +380,7 @@ def make_backup():
         DATA / "checkin.json",
         DATA / "free-models.json",
         DATA / "outbox.json",
+        DATA / "brain.json",
         ROOT / "skills" / "mine" / "how-i-help.md",
     ]
     # Hold a consistent multi-file lock while snapshotting so concurrent
@@ -407,6 +408,7 @@ def restore_backup(name):
         "checkin.json": DATA / "checkin.json",
         "free-models.json": DATA / "free-models.json",
         "outbox.json": DATA / "outbox.json",
+        "brain.json": DATA / "brain.json",
         "how-i-help.md": ROOT / "skills" / "mine" / "how-i-help.md",
     }
     targets = list(allowed.values())
@@ -643,8 +645,14 @@ def append_project_session(project_id, user_msg, ella_msg):
     return locked_update(path, {"messages": []}, transform)
 
 
-def run_vision(text, image_data_url):
-    """Send image + text to moondream via Ollama for vision analysis."""
+def run_vision(text, image_data_url, project_prompt=None, history=None):
+    """Send image + text to moondream via Ollama for vision analysis.
+
+    Injects the same Ella identity / project prompt / history policy as text
+    chat (via build_vision_prompt), truncated for moondream's small context.
+    Honors cancel tokens from 1E. Still hard-codes moondream:latest as the
+    vision model; uses configured OLLAMA_URL when set.
+    """
     used_model = "moondream:latest"
     usage = {
         "provider": "ollama",
@@ -655,15 +663,20 @@ def run_vision(text, image_data_url):
         "tps": 0,
     }
     try:
+        prompt_text = build_vision_prompt(
+            text, project_prompt=project_prompt, history=history
+        )
         raw = image_data_url.split(",", 1)[1]
         payload = json.dumps({
             "model": used_model,
-            "prompt": text,
+            "prompt": prompt_text,
             "images": [raw],
             "stream": False,
         }).encode()
+        env = load_env()
+        base = (env.get("OLLAMA_URL") or "http://127.0.0.1:11434").rstrip("/")
         status, _hdrs, raw_body = cancel.post_json(
-            "http://127.0.0.1:11434/api/generate",
+            base + "/api/generate",
             payload,
             {"Content-Type": "application/json"},
             120,
@@ -684,7 +697,7 @@ def run_vision(text, image_data_url):
         reply = resp.get("response") or ""
         if not reply:
             return "", "I couldn't make sense of that image. Try a clearer screenshot.", usage
-        return reply.strip(), None, usage
+        return polish_reply(reply.strip()), None, usage
     except cancel.Cancelled:
         return "", STOPPED, None
     except Exception as exc:
@@ -739,10 +752,12 @@ def ask(body):
         return {"ok": True, "text": f"Backup saved. {make_backup()}"}
     usage = None
     if image:
+        # Same personality + main chat history as text; truncated for moondream.
         reply, error, usage = run_vision(text, image)
         if reply and usage:
             # Vision bypasses run_model; still log actual provider+model+tokens.
             usage = record_usage(usage.get("provider") or "ollama", usage, "vision")
+            remember_main_chat(text, reply)
     else:
         reply, error, usage = run_model("chat", text)
     if error == STOPPED or cancel.is_cancelled():
@@ -861,12 +876,15 @@ def ask_project(text, project_id, image=""):
     prior = prior[-10:]
 
     usage = None
+    full_prompt = build_project_prompt(proj)
     if image:
-        reply, error, usage = run_vision(text, image)
+        # Same project prompt + session history as text; truncated for moondream.
+        reply, error, usage = run_vision(
+            text, image, project_prompt=full_prompt, history=prior
+        )
         if reply and usage:
             usage = record_usage(usage.get("provider") or "ollama", usage, "vision")
     else:
-        full_prompt = build_project_prompt(proj)
         reply, error, usage = run_model(
             "chat", text, project_prompt=full_prompt, history=prior
         )
