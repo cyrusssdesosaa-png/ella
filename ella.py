@@ -23,10 +23,12 @@ def _server_process():
     main()
 
 
-def _wait_for_server(timeout=20):
-    """Block until the server responds or timeout."""
+def _wait_for_server(timeout=20, proc=None):
+    """Block until the server responds or timeout (or our child exits)."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
+        if proc is not None and not proc.is_alive():
+            return False
         try:
             with urllib.request.urlopen(SERVER_URL + "/api/state", timeout=2):
                 return True
@@ -38,12 +40,24 @@ def _wait_for_server(timeout=20):
 def main():
     import webview
 
+    # Phase 1J: never open a window onto someone else's server. If our own
+    # child server can't take the single-owner lock / port, fail clearly.
     proc = multiprocessing.Process(target=_server_process, daemon=True)
     proc.start()
 
-    if not _wait_for_server():
-        print("Server did not start in time.", flush=True)
-        proc.terminate()
+    if not _wait_for_server(proc=proc):
+        if not proc.is_alive() and proc.exitcode == 3:
+            msg = "Ella is already running (or port 8765 is taken). Close the other Ella window first."
+        else:
+            msg = "Server did not start in time."
+        print(msg, flush=True)
+        try:
+            import ctypes
+            ctypes.windll.user32.MessageBoxW(None, msg, TITLE, 0x30)
+        except Exception:
+            pass
+        if proc.is_alive():
+            proc.terminate()
         sys.exit(1)
 
     window = webview.create_window(

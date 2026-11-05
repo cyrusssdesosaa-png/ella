@@ -1372,7 +1372,74 @@ class Handler(BaseHTTPRequestHandler):
         self._method_not_allowed()
 
 
+EXIT_ALREADY_RUNNING = 3
+_INSTANCE_FD = None
+
+
+def _acquire_instance_lock():
+    """Single-owner gate (Phase 1J). Holds data/server.lock with msvcrt for the
+    whole process lifetime. Windows releases it automatically if the process
+    dies, so a stale file never blocks startup; the PID inside is informational."""
+    global _INSTANCE_FD
+    import msvcrt, os
+    DATA.mkdir(parents=True, exist_ok=True)
+    lock_path = DATA / "server.lock"
+    fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR)
+    try:
+        os.lseek(fd, 0, 0)
+        msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+    except OSError:
+        try:
+            os.lseek(fd, 1, 0)
+            other = os.read(fd, 32).decode("ascii", "ignore").strip()
+        except OSError:
+            other = "?"
+        os.close(fd)
+        return False, other
+    os.lseek(fd, 1, 0)
+    os.write(fd, (str(os.getpid()) + "\n").ljust(16).encode("ascii"))
+    _INSTANCE_FD = fd
+    return True, str(os.getpid())
+
+
+def _release_instance_lock():
+    global _INSTANCE_FD
+    import msvcrt, os
+    if _INSTANCE_FD is None:
+        return
+    try:
+        os.lseek(_INSTANCE_FD, 0, 0)
+        msvcrt.locking(_INSTANCE_FD, msvcrt.LK_UNLCK, 1)
+    except OSError:
+        pass
+    os.close(_INSTANCE_FD)
+    _INSTANCE_FD = None
+
+
+class _ExclusiveHTTPServer(ThreadingHTTPServer):
+    # Default HTTPServer sets SO_REUSEADDR, which on Windows lets a second
+    # process bind the SAME port and steal requests. Use exclusive bind.
+    allow_reuse_address = False
+
+    def server_bind(self):
+        if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
+
+
 def main():
+    import sys
+    ok, owner = _acquire_instance_lock()
+    if not ok:
+        print(f"Ella server is already running (PID {owner or '?'}). Not starting a second copy.", flush=True)
+        sys.exit(EXIT_ALREADY_RUNNING)
+    try:
+        _main_locked()
+    finally:
+        _release_instance_lock()
+
+
+def _main_locked():
     ensure_dirs()
     profile_path = DATA / "profile.json"
     with file_transaction(profile_path):
@@ -1398,9 +1465,18 @@ def main():
     log_line("server start")
     threading.Thread(target=tts_warmup, daemon=True).start()
     maybe_missed_checkin()
-    httpd = ThreadingHTTPServer((HOST, PORT), Handler)
+    try:
+        httpd = _ExclusiveHTTPServer((HOST, PORT), Handler)
+    except OSError as exc:
+        print(f"Port {PORT} is in use by another program ({exc}). Ella not started.", flush=True)
+        raise SystemExit(EXIT_ALREADY_RUNNING)
     print(f"Ella at http://{HOST}:{PORT}", flush=True)
-    httpd.serve_forever()
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        httpd.server_close()
 
 
 if __name__ == "__main__":
