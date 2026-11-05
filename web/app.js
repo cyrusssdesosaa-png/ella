@@ -227,7 +227,7 @@ function setStatus(next) {
   const labels = { online: "Online", thinking: "Thinking", listening: "Listening", transcribing: "Transcribing", speaking: "Speaking" };
   stateLabel.textContent = labels[next] || next;
 
-  if (next === "speaking") {
+  if (next === "speaking" || next === "thinking") {
     $("#stopBtn").classList.remove("hidden");
   } else {
     $("#stopBtn").classList.add("hidden");
@@ -458,10 +458,16 @@ $("#inputForm").addEventListener("submit", async (e) => {
 
   setStatus("thinking");
   liveCaption.textContent = "";
+  const turn = ++mainTurn;
   try {
     const body = { text: text || "What do you see in this image?" };
     if (image) body.image = image;
     const data = await post("/api/ask", body);
+    if (data.cancelled || turn !== mainTurn) {
+      addMessage("ella", "Stopped.", "stopped");
+      setStatus("online");
+      return;
+    }
     const reply = data.ok === false ? friendly(data.error) : (data.text || data.error || "No reply.");
     const tag = replyModelTag(data.usage, { image: !!image });
     addMessage("ella", reply, tag, data.usage && data.usage.completion);
@@ -627,11 +633,16 @@ function sendProjectImage(pid, caption) {
 
 $("#micBtn").addEventListener("click", () => { if (rec) rec.stop(); else startListening(); });
 
-$("#stopBtn").addEventListener("click", () => {
+/* Real Stop: abort in-flight model work on the server, cut audio, ignore late replies. */
+let mainTurn = 0;
+function stopEverything() {
+  mainTurn++;
   if (currentAudio) { currentAudio.pause(); currentAudio.src = ""; currentAudio = null; }
+  post("/api/cancel", {}).catch(() => {});
   setStatus("online");
   liveCaption.textContent = "";
-});
+}
+$("#stopBtn").addEventListener("click", stopEverything);
 
 /* ============================================================
    Keyboard shortcuts
@@ -652,10 +663,8 @@ document.addEventListener("keydown", (e) => {
       $("#projLauncher").classList.add("hidden");
       return;
     }
-    if (currentAudio) { currentAudio.pause(); currentAudio.src = ""; currentAudio = null; }
     if (rec) rec.stop();
-    setStatus("online");
-    liveCaption.textContent = "";
+    stopEverything();
   }
   if (e.ctrlKey && e.key === "k") {
     e.preventDefault();

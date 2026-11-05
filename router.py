@@ -6,6 +6,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+import cancel
+
 ROOT = Path(__file__).resolve().parent
 TIMEOUT = 30
 
@@ -27,17 +29,18 @@ def load_env():
 def _post(url, payload, headers):
     data = json.dumps(payload).encode("utf-8")
     headers = {"User-Agent": "Ella/1.0", **headers}
-    req = urllib.request.Request(url, data=data, headers=headers, method="POST")
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as res:
-            body = json.loads(res.read().decode("utf-8"))
-            remaining = res.headers.get("x-ratelimit-remaining") or res.headers.get(
-                "X-RateLimit-Remaining"
-            )
-            return body, remaining, None
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")[:300]
-        return None, None, f"HTTP {exc.code}: {detail}"
+        status, res_headers, raw = cancel.post_json(url, data, headers, TIMEOUT)
+        if status >= 400:
+            detail = raw.decode("utf-8", errors="replace")[:300]
+            return None, None, f"HTTP {status}: {detail}"
+        body = json.loads(raw.decode("utf-8"))
+        remaining = res_headers.get("x-ratelimit-remaining") or res_headers.get(
+            "X-RateLimit-Remaining"
+        )
+        return body, remaining, None
+    except cancel.Cancelled:
+        raise
     except Exception as exc:
         return None, None, str(exc)
 
@@ -161,6 +164,7 @@ def complete(env, messages, kind, model=None, mode="local", local_model=None):
     last_usage = _usage_from(None, "")
     for name in order:
         for _attempt in (1, 2):
+            cancel.check()
             if name == "groq":
                 text, remaining, err, usage = groq_chat(env, messages)
             elif name == "ollama":

@@ -19,8 +19,9 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from projects import list_projects
-from routines import adapt, check_in, profile, record_usage, retry_outbox, run_model, scout_now, usage_summary
+from routines import STOPPED, adapt, check_in, profile, record_usage, retry_outbox, run_model, scout_now, usage_summary
 from router import load_env, ollama_models
+import cancel
 from vault import find_note, graph, today_text
 from stt import transcribe
 from tts import synthesize, warmup as tts_warmup
@@ -63,7 +64,7 @@ GET_ROUTES = {
 POST_ROUTES = {
     "/api/stt", "/api/tts", "/api/profile", "/api/checkin", "/api/scout",
     "/api/adapt", "/api/outbox", "/api/backup", "/api/restore", "/api/ask",
-    "/api/projects", "/api/brain", "/api/stop",
+    "/api/projects", "/api/brain", "/api/stop", "/api/cancel",
 }
 LOCK = RoutineLock()
 SESSIONS = DATA / "sessions"
@@ -623,13 +624,15 @@ def run_vision(text, image_data_url):
             "images": [raw],
             "stream": False,
         }).encode()
-        req = urllib.request.Request(
+        status, _hdrs, raw_body = cancel.post_json(
             "http://127.0.0.1:11434/api/generate",
-            data=payload,
-            headers={"Content-Type": "application/json"},
+            payload,
+            {"Content-Type": "application/json"},
+            120,
         )
-        with urllib.request.urlopen(req, timeout=120) as r:
-            resp = json.loads(r.read())
+        if status >= 400:
+            raise RuntimeError(f"HTTP {status}")
+        resp = json.loads(raw_body)
         # Prefer what Ollama reports it actually ran.
         usage["model"] = (resp.get("model") or used_model).strip() or used_model
         prompt = int(resp.get("prompt_eval_count") or 0)
@@ -644,6 +647,8 @@ def run_vision(text, image_data_url):
         if not reply:
             return "", "I couldn't make sense of that image. Try a clearer screenshot.", usage
         return reply.strip(), None, usage
+    except cancel.Cancelled:
+        return "", STOPPED, None
     except Exception as exc:
         log_line(f"vision request failed: {type(exc).__name__}")
         return "", "Image analysis failed. Check the local vision model and try again.", usage
@@ -702,6 +707,8 @@ def ask(body):
             usage = record_usage(usage.get("provider") or "ollama", usage, "vision")
     else:
         reply, error, usage = run_model("chat", text)
+    if error == STOPPED or cancel.is_cancelled():
+        return {"ok": False, "cancelled": True, "error": STOPPED}
     if error or not reply:
         return {"ok": False, "error": error or "No model answered"}
     add_activity("ask", reply.splitlines()[0][:160])
@@ -825,6 +832,8 @@ def ask_project(text, project_id, image=""):
         reply, error, usage = run_model(
             "chat", text, project_prompt=full_prompt, history=prior
         )
+    if error == STOPPED or cancel.is_cancelled():
+        return {"ok": False, "cancelled": True, "error": STOPPED}
     if error or not reply:
         return {"ok": False, "error": error or "No model answered"}
 
@@ -1051,6 +1060,9 @@ class Handler(BaseHTTPRequestHandler):
         return _require_string(value, "Query", maximum, allow_empty=True)
 
     def _send_result(self, result, failure_status=502, failure_message=None):
+        if isinstance(result, dict) and result.get("cancelled"):
+            self._send(200, result)
+            return
         if isinstance(result, dict) and result.get("ok") is False:
             status = 409 if result.get("error") == "another routine is already running" else failure_status
             if failure_message and status != 409:
@@ -1194,10 +1206,26 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200 if result.get("ok") else 404, result)
                 return
 
+            if path == "/api/cancel":
+                _validate_keys(self._read_json(), set())
+                cancel_all = cancel.cancel_all()
+                add_activity("ask", "stop pressed")
+                self._send(200, {"ok": True, "cancelled": True, "epoch": cancel_all})
+                return
+
             if path == "/api/ask":
                 body = self._read_json(MAX_ASK_BYTES)
+                # Token taken on arrival so Stop also cancels asks queued on the lock.
+                cancel.begin()
+                try:
+                    result = run_locked(
+                        lambda: {"ok": False, "cancelled": True, "error": STOPPED}
+                        if cancel.is_cancelled() else ask(body)
+                    )
+                finally:
+                    cancel.end()
                 self._send_result(
-                    run_locked(lambda: ask(body)),
+                    result,
                     failure_message="Model request failed. Check the selected provider and local service.",
                 )
                 return

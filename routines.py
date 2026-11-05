@@ -10,6 +10,9 @@ from router import complete, load_env
 from scout import fetch_free_models
 from store import DATA, add_activity, log_line, locked_update, now_iso, read_json, snapshot_skill, write_json
 from vault import append_session, index_text
+import cancel
+
+STOPPED = "Stopped."
 
 ROOT = Path(__file__).resolve().parent
 HELP = ROOT / "skills" / "mine" / "how-i-help.md"
@@ -233,14 +236,18 @@ def run_model(kind, task, project_prompt=None, queue_on_fail=True, history=None)
     model = models[0]["id"] if models else "openrouter/free"
     brain = read_json(DATA / "brain.json", {"mode": "local", "model": "llama3.2:3b"})
     msgs = _messages(task, kind, project_prompt=project_prompt, history=history)
-    text, provider, remaining, error, usage = complete(
-        env,
-        msgs,
-        kind,
-        model,
-        mode=brain.get("mode") or "local",
-        local_model=brain.get("model") or "llama3.2:3b",
-    )
+    try:
+        text, provider, remaining, error, usage = complete(
+            env,
+            msgs,
+            kind,
+            model,
+            mode=brain.get("mode") or "local",
+            local_model=brain.get("model") or "llama3.2:3b",
+        )
+    except cancel.Cancelled:
+        # User pressed Stop: no outbox retry, no history, no usage.
+        return "", STOPPED, None
     if remaining is not None:
         write_json(DATA / "quota.json", {"remaining": remaining, "provider": provider, "at": now_iso()})
     if not text:
