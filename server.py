@@ -31,8 +31,10 @@ from store import (
     RoutineLock,
     add_activity,
     ensure_dirs,
+    file_transaction,
     locked_update,
     log_line,
+    multi_file_transaction,
     now_iso,
     read_json,
     write_json,
@@ -380,10 +382,13 @@ def make_backup():
         DATA / "outbox.json",
         ROOT / "skills" / "mine" / "how-i-help.md",
     ]
-    with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as archive:
-        for path in include:
-            if path.exists():
-                archive.write(path, path.name)
+    # Hold a consistent multi-file lock while snapshotting so concurrent
+    # locked_update writers cannot interleave mid-zip.
+    with multi_file_transaction(include):
+        with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as archive:
+            for path in include:
+                if path.exists():
+                    archive.write(path, path.name)
     add_activity("backup", dest.name)
     return dest.name
 
@@ -404,13 +409,16 @@ def restore_backup(name):
         "outbox.json": DATA / "outbox.json",
         "how-i-help.md": ROOT / "skills" / "mine" / "how-i-help.md",
     }
-    with zipfile.ZipFile(src) as archive:
-        for info in archive.infolist():
-            target = allowed.get(Path(info.filename).name)
-            if target is None:
-                continue
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(archive.read(info))
+    targets = list(allowed.values())
+    # Serialize restores against concurrent RMW on the same allowlisted files.
+    with multi_file_transaction(targets):
+        with zipfile.ZipFile(src) as archive:
+            for info in archive.infolist():
+                target = allowed.get(Path(info.filename).name)
+                if target is None:
+                    continue
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(archive.read(info))
     add_activity("restore", name)
     return {"ok": True, "name": name}
 
@@ -477,17 +485,23 @@ def local_model_names():
 def save_brain(body):
     body = _require_object(body)
     _validate_keys(body, {"mode", "model"})
-    current = brain_file()
-    mode = body.get("mode") or current.get("mode") or "local"
-    if not isinstance(mode, str) or mode not in {"local", "cloud"}:
-        raise RequestError(400, "Mode must be local or cloud.")
-    model = body.get("model") or current.get("model") or "llama3.2:3b"
-    if not isinstance(model, str) or not re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", model.strip()):
-        raise RequestError(400, "Invalid model name.")
-    model = model.strip()
-    payload = {"mode": mode, "model": model}
-    write_json(DATA / "brain.json", payload)
-    add_activity("brain", f"{mode} {model}")
+
+    def transform(current):
+        mode = body.get("mode") or current.get("mode") or "local"
+        if not isinstance(mode, str) or mode not in {"local", "cloud"}:
+            raise RequestError(400, "Mode must be local or cloud.")
+        model = body.get("model") or current.get("model") or "llama3.2:3b"
+        if not isinstance(model, str) or not re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", model.strip()):
+            raise RequestError(400, "Invalid model name.")
+        model = model.strip()
+        return {"mode": mode, "model": model}
+
+    payload = locked_update(
+        DATA / "brain.json",
+        {"mode": "local", "model": "llama3.2:3b"},
+        transform,
+    )
+    add_activity("brain", f"{payload['mode']} {payload['model']}")
     return payload
 
 
@@ -1331,8 +1345,10 @@ def main():
         )
     if not (DATA / "memory.json").exists():
         write_json(DATA / "memory.json", {"facts": []})
-    if not (DATA / "brain.json").exists():
-        write_json(DATA / "brain.json", {"mode": "local", "model": "llama3.2:3b"})
+    brain_path = DATA / "brain.json"
+    with file_transaction(brain_path):
+        if not brain_path.exists():
+            write_json(brain_path, {"mode": "local", "model": "llama3.2:3b"})
     log_line("server start")
     threading.Thread(target=tts_warmup, daemon=True).start()
     maybe_missed_checkin()
