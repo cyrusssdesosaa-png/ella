@@ -53,8 +53,8 @@ def _text_from(body):
     return (message.get("content") or "").strip()
 
 
-def _usage_from(body, provider):
-    usage = {"prompt": 0, "completion": 0, "total": 0, "provider": provider, "tps": 0}
+def _usage_from(body, provider, model=""):
+    usage = {"prompt": 0, "completion": 0, "total": 0, "provider": provider, "model": model or "", "tps": 0}
     if not isinstance(body, dict):
         return usage
     if provider == "ollama":
@@ -63,10 +63,13 @@ def _usage_from(body, provider):
         dur = body.get("eval_duration") or 0
         if dur and completion:
             usage["tps"] = round(completion / (dur / 1e9), 1)
+        # Ollama echoes the model that served the request.
+        usage["model"] = (body.get("model") or model or "").strip() or (model or "")
     else:
         raw = body.get("usage") or {}
         prompt = int(raw.get("prompt_tokens") or 0)
         completion = int(raw.get("completion_tokens") or 0)
+        usage["model"] = (body.get("model") or model or "").strip() or (model or "")
     usage["prompt"] = max(0, prompt)
     usage["completion"] = max(0, completion)
     usage["total"] = usage["prompt"] + usage["completion"]
@@ -91,8 +94,9 @@ def ollama_models(env):
 
 def ollama_chat(env, messages, model=None):
     url = ollama_base(env) + "/api/chat"
+    used = model or "llama3.2:3b"
     payload = {
-        "model": model or "llama3.2:3b",
+        "model": used,
         "messages": messages,
         "stream": False,
         "keep_alive": "10m",
@@ -105,31 +109,33 @@ def ollama_chat(env, messages, model=None):
     }
     body, remaining, err = _post(url, payload, {"Content-Type": "application/json"})
     if err:
-        return "", None, err, _usage_from(None, "ollama")
-    return _text_from(body), remaining, None, _usage_from(body, "ollama")
+        return "", None, err, _usage_from(None, "ollama", used)
+    return _text_from(body), remaining, None, _usage_from(body, "ollama", used)
 
 
 def groq_chat(env, messages):
     key = env.get("GROQ_API_KEY") or ""
+    used = "llama-3.1-8b-instant"
     if not key:
-        return "", None, "No Groq key", _usage_from(None, "groq")
+        return "", None, "No Groq key", _usage_from(None, "groq", used)
     body, remaining, err = _post(
         "https://api.groq.com/openai/v1/chat/completions",
-        {"model": "llama-3.1-8b-instant", "messages": messages},
+        {"model": used, "messages": messages},
         {"Content-Type": "application/json", "Authorization": f"Bearer {key}"},
     )
     if err:
-        return "", remaining, err, _usage_from(None, "groq")
-    return _text_from(body), remaining, None, _usage_from(body, "groq")
+        return "", remaining, err, _usage_from(None, "groq", used)
+    return _text_from(body), remaining, None, _usage_from(body, "groq", used)
 
 
 def openrouter_chat(env, messages, model):
     key = env.get("OPENROUTER_API_KEY") or ""
+    used = model or "openrouter/free"
     if not key:
-        return "", None, "No OpenRouter key", _usage_from(None, "openrouter")
+        return "", None, "No OpenRouter key", _usage_from(None, "openrouter", used)
     body, remaining, err = _post(
         "https://openrouter.ai/api/v1/chat/completions",
-        {"model": model or "openrouter/free", "messages": messages},
+        {"model": used, "messages": messages},
         {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {key}",
@@ -138,8 +144,8 @@ def openrouter_chat(env, messages, model):
         },
     )
     if err:
-        return "", remaining, err, _usage_from(None, "openrouter")
-    return _text_from(body), remaining, None, _usage_from(body, "openrouter")
+        return "", remaining, err, _usage_from(None, "openrouter", used)
+    return _text_from(body), remaining, None, _usage_from(body, "openrouter", used)
 
 
 def complete(env, messages, kind, model=None, mode="local", local_model=None):
@@ -164,6 +170,13 @@ def complete(env, messages, kind, model=None, mode="local", local_model=None):
             last_usage = usage
             if text:
                 usage["provider"] = name
+                if not usage.get("model"):
+                    if name == "ollama":
+                        usage["model"] = local_model or "llama3.2:3b"
+                    elif name == "groq":
+                        usage["model"] = "llama-3.1-8b-instant"
+                    else:
+                        usage["model"] = model or "openrouter/free"
                 return text, name, remaining, None, usage
             errors.append(f"{name}: {err or 'empty reply'}")
     return "", "", remaining, "; ".join(errors), last_usage

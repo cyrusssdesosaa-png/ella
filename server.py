@@ -19,7 +19,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from projects import list_projects
-from routines import adapt, check_in, profile, retry_outbox, run_model, scout_now, usage_summary
+from routines import adapt, check_in, profile, record_usage, retry_outbox, run_model, scout_now, usage_summary
 from router import load_env, ollama_models
 from vault import find_note, graph, today_text
 from stt import transcribe
@@ -30,6 +30,7 @@ from store import (
     RoutineLock,
     add_activity,
     ensure_dirs,
+    locked_update,
     log_line,
     now_iso,
     read_json,
@@ -582,15 +583,42 @@ def load_project_session(project_id):
 
 def save_project_session(project_id, session):
     SESSIONS.mkdir(parents=True, exist_ok=True)
-    write_json(project_session_path(project_id), session)
+    path = project_session_path(project_id)
+    payload = session if isinstance(session, dict) else {"messages": []}
+    locked_update(path, {"messages": []}, lambda _: payload)
+
+
+def append_project_session(project_id, user_msg, ella_msg):
+    """Append a successful turn under lock so concurrent asks cannot drop messages."""
+    SESSIONS.mkdir(parents=True, exist_ok=True)
+    path = project_session_path(project_id)
+
+    def transform(session):
+        msgs = list((session or {}).get("messages") or [])
+        msgs.append(user_msg)
+        msgs.append(ella_msg)
+        if len(msgs) > 100:
+            msgs = msgs[-100:]
+        return {"messages": msgs}
+
+    return locked_update(path, {"messages": []}, transform)
 
 
 def run_vision(text, image_data_url):
     """Send image + text to moondream via Ollama for vision analysis."""
+    used_model = "moondream:latest"
+    usage = {
+        "provider": "ollama",
+        "model": used_model,
+        "prompt": 0,
+        "completion": 0,
+        "total": 0,
+        "tps": 0,
+    }
     try:
         raw = image_data_url.split(",", 1)[1]
         payload = json.dumps({
-            "model": "moondream:latest",
+            "model": used_model,
             "prompt": text,
             "images": [raw],
             "stream": False,
@@ -602,13 +630,23 @@ def run_vision(text, image_data_url):
         )
         with urllib.request.urlopen(req, timeout=120) as r:
             resp = json.loads(r.read())
+        # Prefer what Ollama reports it actually ran.
+        usage["model"] = (resp.get("model") or used_model).strip() or used_model
+        prompt = int(resp.get("prompt_eval_count") or 0)
+        completion = int(resp.get("eval_count") or 0)
+        dur = resp.get("eval_duration") or 0
+        usage["prompt"] = max(0, prompt)
+        usage["completion"] = max(0, completion)
+        usage["total"] = usage["prompt"] + usage["completion"]
+        if dur and completion:
+            usage["tps"] = round(completion / (dur / 1e9), 1)
         reply = resp.get("response") or ""
         if not reply:
-            return "", "I couldn't make sense of that image. Try a clearer screenshot."
-        return reply.strip(), None
+            return "", "I couldn't make sense of that image. Try a clearer screenshot.", usage
+        return reply.strip(), None, usage
     except Exception as exc:
         log_line(f"vision request failed: {type(exc).__name__}")
-        return "", "Image analysis failed. Check the local vision model and try again."
+        return "", "Image analysis failed. Check the local vision model and try again.", usage
 
 
 def ask(body):
@@ -658,7 +696,10 @@ def ask(body):
         return {"ok": True, "text": f"Backup saved. {make_backup()}"}
     usage = None
     if image:
-        reply, error = run_vision(text, image)
+        reply, error, usage = run_vision(text, image)
+        if reply and usage:
+            # Vision bypasses run_model; still log actual provider+model+tokens.
+            usage = record_usage(usage.get("provider") or "ollama", usage, "vision")
     else:
         reply, error, usage = run_model("chat", text)
     if error or not reply:
@@ -759,22 +800,37 @@ def ask_project(text, project_id, image=""):
         raise RequestError(404, "Project not found.")
 
     session = load_project_session(project_id)
-    messages = session.get("messages") or []
-    messages.append({"role": "user", "text": text, "at": now_iso()})
+    messages = list(session.get("messages") or [])
+
+    # Build model history from THIS project's session only — never main chat.
+    prior = []
+    for m in messages:
+        content = (m.get("text") or "").strip()
+        if not content:
+            continue
+        role = m.get("role") or "user"
+        if role in ("ella", "assistant"):
+            prior.append({"role": "assistant", "content": content})
+        else:
+            prior.append({"role": "user", "content": content})
+    prior = prior[-10:]
 
     usage = None
     if image:
-        reply, error = run_vision(text, image)
+        reply, error, usage = run_vision(text, image)
+        if reply and usage:
+            usage = record_usage(usage.get("provider") or "ollama", usage, "vision")
     else:
         full_prompt = build_project_prompt(proj)
-        reply, error, usage = run_model("chat", text, project_prompt=full_prompt)
+        reply, error, usage = run_model(
+            "chat", text, project_prompt=full_prompt, history=prior
+        )
     if error or not reply:
         return {"ok": False, "error": error or "No model answered"}
 
-    messages.append({"role": "ella", "text": reply, "at": now_iso()})
-    if len(messages) > 100:
-        messages = messages[-100:]
-    save_project_session(project_id, {"messages": messages})
+    user_msg = {"role": "user", "text": text, "at": now_iso()}
+    ella_msg = {"role": "ella", "text": reply, "at": now_iso()}
+    append_project_session(project_id, user_msg, ella_msg)
     add_activity("project", f"{proj['name']}: {reply.splitlines()[0][:80]}")
     return {"ok": True, "text": reply, "project": project_id, "usage": usage, "usage_summary": usage_summary()}
 

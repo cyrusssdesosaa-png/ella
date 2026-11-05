@@ -18,7 +18,7 @@ const GREETINGS = [
 ];
 
 /* ---- State ---- */
-let brain = { mode: "local", model: "qwen2.5:7b" };
+let brain = { mode: "local", model: "llama3.2:3b" };
 let conversationMode = false;
 let currentNav = "dashboard";
 let currentView = "home";
@@ -244,6 +244,24 @@ function friendly(message) {
 /* ============================================================
    Brain pill
    ============================================================ */
+
+/* Prefer the model that actually answered this reply — never a stale pill label. */
+function projectTokenLabel(usage) {
+  const toks = usage && usage.completion;
+  const model = usage && usage.model;
+  if (model && toks != null) return model + " - " + toks;
+  if (model) return model;
+  return toks;
+}
+
+function replyModelTag(usage, opts) {
+  opts = opts || {};
+  if (usage && usage.model) return usage.model;
+  if (usage && usage.provider) return usage.provider;
+  if (opts.image) return "moondream:latest";
+  return (brain && brain.model) || "unknown";
+}
+
 function paintBrain() {
   const label = `${brain.mode.toUpperCase()} · ${brain.model}`;
   brainLabel.textContent = label;
@@ -445,7 +463,7 @@ $("#inputForm").addEventListener("submit", async (e) => {
     if (image) body.image = image;
     const data = await post("/api/ask", body);
     const reply = data.ok === false ? friendly(data.error) : (data.text || data.error || "No reply.");
-    const tag = brain.mode === "local" ? (image ? "moondream" : brain.model) : "cloud";
+    const tag = replyModelTag(data.usage, { image: !!image });
     addMessage("ella", reply, tag, data.usage && data.usage.completion);
     if (data.usage_summary) paintUsage(data.usage_summary);
     typeCaption(reply);
@@ -601,7 +619,7 @@ function sendProjectImage(pid, caption) {
     .then((data) => {
       dots.remove();
       const reply = data.ok === false ? (data.error || "Error") : (data.text || "No reply.");
-      addProjectMsg(chatEl, "ella", reply, proj, data.usage && data.usage.completion);
+      addProjectMsg(chatEl, "ella", reply, proj, projectTokenLabel(data.usage));
       if (data.usage_summary) paintUsage(data.usage_summary);
     })
     .catch((e) => { dots.remove(); addProjectMsg(chatEl, "ella", "Error: " + e.message, proj); });
@@ -990,7 +1008,7 @@ function greet() {
   else if (h < 17) greeting = GREETINGS[3];
   else greeting = GREETINGS[4];
   setTimeout(() => {
-    addMessage("ella", greeting, brain.model);
+    addMessage("ella", greeting, "ella");
     typeCaption(greeting);
     speak(greeting);
   }, 1200);
@@ -1092,7 +1110,7 @@ function renderHealth() {
     let html = rows.length ? rows.map((c) => `
       <div class="call-row">
         <span>${shortTime(c.at)}</span>
-        <span class="call-main">${escapeHtml(c.provider || "model")} · ${escapeHtml(c.kind || "chat")}</span>
+        <span class="call-main">${escapeHtml([c.model, c.provider, c.kind].filter(Boolean).join(" - ") || "call")}</span>
         <span>${fmtTok(c.prompt)} → ${fmtTok(c.completion)}</span>
       </div>`).join("") : `<div class="empty-note">No calls logged yet. Send a message and the ledger fills in.</div>`;
     if (quota.remaining != null && quota.remaining !== "") {
@@ -1345,7 +1363,7 @@ async function openProjectWindow(pid) {
       const data = await post("/api/ask", { text, project: pid });
       dots.remove();
       const reply = data.ok === false ? (data.error || "Error") : (data.text || "No reply.");
-      addProjectMsg(chatEl, "ella", reply, proj, data.usage && data.usage.completion);
+      addProjectMsg(chatEl, "ella", reply, proj, projectTokenLabel(data.usage));
       if (data.usage_summary) paintUsage(data.usage_summary);
       if (win.classList.contains("hidden")) {
         state.unread++;
@@ -1380,7 +1398,7 @@ async function openProjectWindow(pid) {
         .then((data) => {
           dots.remove();
           const reply = data.ok === false ? (data.error || "Error") : (data.text || "No reply.");
-          addProjectMsg(chatEl, "ella", reply, proj, data.usage && data.usage.completion);
+          addProjectMsg(chatEl, "ella", reply, proj, projectTokenLabel(data.usage));
           if (data.usage_summary) paintUsage(data.usage_summary);
         })
         .catch((e) => { dots.remove(); addProjectMsg(chatEl, "ella", "Error: " + e.message, proj); });

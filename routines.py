@@ -8,7 +8,7 @@ from pathlib import Path
 
 from router import complete, load_env
 from scout import fetch_free_models
-from store import DATA, add_activity, log_line, now_iso, read_json, snapshot_skill, write_json
+from store import DATA, add_activity, log_line, locked_update, now_iso, read_json, snapshot_skill, write_json
 from vault import append_session, index_text
 
 ROOT = Path(__file__).resolve().parent
@@ -72,7 +72,7 @@ def _now_str():
     return now.strftime("%A %B %d, %Y %I:%M %p")
 
 
-def _messages(task, kind="chat", project_prompt=None):
+def _messages(task, kind="chat", project_prompt=None, history=None):
     now = _now_str()
     if project_prompt:
         system = (
@@ -115,8 +115,17 @@ def _messages(task, kind="chat", project_prompt=None):
         )
     messages = [{"role": "system", "content": system}]
     if kind == "chat":
-        for turn in _chat_history[-MAX_HISTORY:]:
-            messages.append(turn)
+        # Project chats must never receive main _chat_history.
+        # Caller-supplied history (project session) wins; main history only for main chat.
+        if history is not None:
+            for turn in history[-MAX_HISTORY:]:
+                role = turn.get("role")
+                content = (turn.get("content") or "").strip()
+                if role in ("user", "assistant") and content:
+                    messages.append({"role": role, "content": content})
+        elif not project_prompt:
+            for turn in _chat_history[-MAX_HISTORY:]:
+                messages.append(turn)
     messages.append({"role": "user", "content": task})
     return messages
 
@@ -148,11 +157,27 @@ def _identity_check(text):
     return text
 
 
+OUTBOX_MAX = 40
+
+
+def _outbox_list(rows):
+    return rows if isinstance(rows, list) else []
+
+
+def _outbox_key(row):
+    return (row.get("at"), row.get("kind"), row.get("task"))
+
+
 def save_outbox(kind, task, error):
     path = DATA / "outbox.json"
-    rows = read_json(path, [])
-    rows.append({"at": now_iso(), "kind": kind, "task": task, "error": error})
-    write_json(path, rows[-40:])
+    entry = {"at": now_iso(), "kind": kind, "task": task, "error": error}
+
+    def transform(rows):
+        rows = _outbox_list(rows)
+        rows.append(entry)
+        return rows[-OUTBOX_MAX:]
+
+    locked_update(path, [], transform)
 
 
 def record_usage(provider, usage, kind):
@@ -161,23 +186,27 @@ def record_usage(provider, usage, kind):
         "at": now_iso(),
         "kind": kind,
         "provider": provider or usage.get("provider") or "",
+        "model": usage.get("model") or "",
         "prompt": int(usage.get("prompt") or 0),
         "completion": int(usage.get("completion") or 0),
         "total": int(usage.get("total") or 0),
         "tps": usage.get("tps") or 0,
     }
     path = DATA / "usage.json"
-    data = read_json(path, {"calls": [], "totals": {"prompt": 0, "completion": 0, "calls": 0}})
-    calls = data.get("calls") or []
-    calls.append(row)
-    totals = data.get("totals") or {"prompt": 0, "completion": 0, "calls": 0}
-    totals["prompt"] = int(totals.get("prompt") or 0) + row["prompt"]
-    totals["completion"] = int(totals.get("completion") or 0) + row["completion"]
-    totals["calls"] = int(totals.get("calls") or 0) + 1
-    data["calls"] = calls[-80:]
-    data["totals"] = totals
-    data["last"] = row
-    write_json(path, data)
+
+    def transform(data):
+        calls = data.get("calls") or []
+        calls.append(row)
+        totals = data.get("totals") or {"prompt": 0, "completion": 0, "calls": 0}
+        totals["prompt"] = int(totals.get("prompt") or 0) + row["prompt"]
+        totals["completion"] = int(totals.get("completion") or 0) + row["completion"]
+        totals["calls"] = int(totals.get("calls") or 0) + 1
+        data["calls"] = calls[-80:]
+        data["totals"] = totals
+        data["last"] = row
+        return data
+
+    locked_update(path, {"calls": [], "totals": {"prompt": 0, "completion": 0, "calls": 0}}, transform)
     return row
 
 
@@ -198,12 +227,12 @@ def usage_summary():
     }
 
 
-def run_model(kind, task, project_prompt=None):
+def run_model(kind, task, project_prompt=None, queue_on_fail=True, history=None):
     env = load_env()
     models = read_json(DATA / "free-models.json", {"models": []}).get("models") or []
     model = models[0]["id"] if models else "openrouter/free"
     brain = read_json(DATA / "brain.json", {"mode": "local", "model": "llama3.2:3b"})
-    msgs = _messages(task, kind, project_prompt=project_prompt)
+    msgs = _messages(task, kind, project_prompt=project_prompt, history=history)
     text, provider, remaining, error, usage = complete(
         env,
         msgs,
@@ -215,7 +244,8 @@ def run_model(kind, task, project_prompt=None):
     if remaining is not None:
         write_json(DATA / "quota.json", {"remaining": remaining, "provider": provider, "at": now_iso()})
     if not text:
-        save_outbox(kind, task, error or "empty")
+        if queue_on_fail:
+            save_outbox(kind, task, error or "empty")
         return "", error or "No model answered", None
     text = _strip_leaked_context(text)
     text = _identity_check(text)
@@ -243,7 +273,7 @@ def check_in():
         add_activity("check-in", error)
         log_line(f"check-in failed: {error}")
         return {"ok": False, "error": error}
-    write_json(DATA / "checkin.json", {"at": now_iso(), "text": text})
+    locked_update(DATA / "checkin.json", {}, lambda _: {"at": now_iso(), "text": text})
     first = text.splitlines()[0] if text else "done"
     append_session(
         "Check-in",
@@ -299,17 +329,38 @@ def adapt():
 
 def retry_outbox():
     path = DATA / "outbox.json"
-    rows = read_json(path, [])
-    if not rows:
-        return {"ok": True, "sent": 0}
-    kept = []
-    sent = 0
-    for row in rows:
-        text, error, _usage = run_model(row.get("kind") or "routine", row.get("task") or "")
+
+    # Phase 1: snapshot under lock (no model call while locked).
+    snapshot = list(_outbox_list(locked_update(path, [], _outbox_list)))
+
+    # Phase 2: call the model with NO lock held. Failures are not re-queued by
+    # run_model (queue_on_fail=False); the original row stays in the file.
+    sent_keys = set()
+    errors = {}
+    for row in snapshot:
+        if not isinstance(row, dict):
+            continue
+        text, error, _usage = run_model(row.get("kind") or "routine", row.get("task") or "", queue_on_fail=False)
         if error or not text:
-            kept.append(row)
+            errors[_outbox_key(row)] = error or "empty"
         else:
-            sent += 1
+            sent_keys.add(_outbox_key(row))
             add_activity("outbox", text.splitlines()[0])
-    write_json(path, kept)
-    return {"ok": True, "sent": sent, "left": len(kept)}
+
+    # Phase 3: re-lock and merge. Drop only rows that were sent; keep rows that
+    # failed (with refreshed error) and any rows added meanwhile. Always a list.
+    def merge(rows):
+        out = []
+        for row in _outbox_list(rows):
+            if not isinstance(row, dict):
+                continue
+            key = _outbox_key(row)
+            if key in sent_keys:
+                continue
+            if key in errors:
+                row = {**row, "error": errors[key]}
+            out.append(row)
+        return out[-OUTBOX_MAX:]
+
+    remaining = locked_update(path, [], merge)
+    return {"ok": True, "sent": len(sent_keys), "left": len(remaining)}

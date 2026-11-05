@@ -13,3 +13,6 @@ data/stop.flag
 _pip_backup/
 .pytest_cache/
 web/_backup_*/
+
+# Local Phase 1 patch backups (do not commit)
+_pip_backup_*/
