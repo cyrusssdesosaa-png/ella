@@ -905,6 +905,17 @@ body[data-mode="listening"] .state-label { color: var(--cyan); }
 }
 .proj-win-send:hover { background: rgba(34,229,255,0.08); }
 .proj-win-send svg { width: 16px; height: 16px; }
+.proj-win-stop {
+  width: 32px; height: 32px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--red);
+}
+.proj-win-stop.hidden { display: none; }
+.proj-win-stop:hover { background: rgba(255,68,102,0.10); }
+.proj-win-stop svg { width: 14px; height: 14px; }
 
 /* ============================================================
    MINIMIZED CHIPS

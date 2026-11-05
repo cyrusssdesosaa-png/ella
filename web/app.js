@@ -520,9 +520,37 @@ function validImageDataUrl(value) {
     && /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]*={0,2}$/i.test(value);
 }
 
+/* Phase 1H: remember which surface (main vs a project window) the user last
+   interacted with, so paste goes there even when focus is on a non-input
+   element (chat scroll area, header) or has drifted to <body>. */
+let lastProjectPid = null;
+function pidForWin(win) {
+  if (!win) return null;
+  return Object.keys(openProjectWindows).find((k) => openProjectWindows[k].el === win) || null;
+}
+function projectVisible(pid) {
+  const st = pid && openProjectWindows[pid];
+  return !!st && document.body.contains(st.el) && !st.el.classList.contains("hidden");
+}
+function noteSurface(e) {
+  const win = e.target && e.target.closest ? e.target.closest(".proj-win") : null;
+  lastProjectPid = win ? pidForWin(win) : null;
+}
+document.addEventListener("mousedown", noteSurface, true);
+document.addEventListener("focusin", noteSurface, true);
+function pasteTargetPid(e) {
+  const el = (e.target && e.target.closest) ? e.target : document.activeElement;
+  const win = el && el.closest ? el.closest(".proj-win") : null;
+  if (win) return pidForWin(win);
+  if (el === chatInput || (el && el.closest && el.closest("#inputForm"))) return null;
+  return projectVisible(lastProjectPid) ? lastProjectPid : null;
+}
+
 document.addEventListener("paste", (e) => {
   const items = (e.clipboardData || {}).items;
   if (!items) return;
+  /* resolve target synchronously - activeElement may change before FileReader finishes */
+  const targetPid = pasteTargetPid(e);
 
   for (const item of items) {
     if (item.type.startsWith("image/")) {
@@ -532,14 +560,14 @@ document.addEventListener("paste", (e) => {
       const reader = new FileReader();
       reader.onload = () => {
         if (!validImageDataUrl(reader.result)) { showToast("That image format or size is not supported."); return; }
-        const el = document.activeElement;
-        const projWin = el?.closest(".proj-win") || el?.closest(".proj-win-input");
-        if (projWin) {
-          const inputArea = projWin.querySelector(".proj-win-input") || projWin.closest(".proj-win")?.querySelector(".proj-win-input");
+        if (targetPid) {
+          const st = openProjectWindows[targetPid];
+          const inputArea = st && st.el.querySelector(".proj-win-input");
           if (inputArea) {
             handleProjectPaste(inputArea, reader.result);
-            return;
+            inputArea.querySelector("input[type=text]")?.focus();
           }
+          return; /* never fall through to main while a project was the target */
         }
         pendingMainImage = reader.result;
         showPastePreview(reader.result);
@@ -608,6 +636,56 @@ function handleProjectPaste(inputArea, dataUrl) {
   }
 }
 
+/* Phase 1H: project-window in-flight tracking for the Stop control.
+   /api/cancel is a global epoch, so Stop in any window cancels every
+   in-flight ask (main + projects); each window marks its own turns stopped. */
+function projBegin(state) {
+  state.turn = state.turn || 0;
+  state.pending = (state.pending || 0) + 1;
+  state.el.querySelector(".proj-win-stop")?.classList.remove("hidden");
+  return state.turn;
+}
+function projEnd(state, turn) {
+  if (turn !== state.turn) return;
+  state.pending = Math.max(0, (state.pending || 0) - 1);
+  if (!state.pending) state.el.querySelector(".proj-win-stop")?.classList.add("hidden");
+}
+function stopProjects() {
+  for (const st of Object.values(openProjectWindows)) {
+    if (!st.pending) continue;
+    st.turn = (st.turn || 0) + 1;
+    st.pending = 0;
+    st.el.querySelectorAll(".proj-thinking").forEach((d) => d.remove());
+    st.el.querySelector(".proj-win-stop")?.classList.add("hidden");
+    addProjectMsg(st.el.querySelector(".proj-win-chat"), "ella", "Stopped.", st.proj);
+  }
+}
+function askProject(pid, body) {
+  const state = openProjectWindows[pid];
+  if (!state) return Promise.resolve();
+  const proj = state.proj;
+  const win = state.el;
+  const chatEl = win.querySelector(".proj-win-chat");
+  const turn = projBegin(state);
+  const dots = addThinkingDot(chatEl, proj);
+  return post("/api/ask", { ...body, project: pid })
+    .then((data) => {
+      if (turn !== state.turn) return; /* already shown as Stopped */
+      dots.remove();
+      if (data.cancelled) { addProjectMsg(chatEl, "ella", "Stopped.", proj); return; }
+      const reply = data.ok === false ? (data.error || "Error") : (data.text || "No reply.");
+      addProjectMsg(chatEl, "ella", reply, proj, projectTokenLabel(data.usage));
+      if (data.usage_summary) paintUsage(data.usage_summary);
+      if (win.classList.contains("hidden")) { state.unread++; renderMiniChips(); }
+    })
+    .catch((e) => {
+      if (turn !== state.turn) return;
+      dots.remove();
+      addProjectMsg(chatEl, "ella", "Error: " + e.message, proj);
+    })
+    .finally(() => projEnd(state, turn));
+}
+
 function sendProjectImage(pid, caption) {
   const state = openProjectWindows[pid];
   if (!state || !state._pendingImg) return;
@@ -620,15 +698,7 @@ function sendProjectImage(pid, caption) {
   if (preview) preview.remove();
 
   addProjectImg(chatEl, "user", "screenshot.png", img, proj);
-  const dots = addThinkingDot(chatEl, proj);
-  post("/api/ask", { text: caption || "What do you see in this image?", project: pid, image: img })
-    .then((data) => {
-      dots.remove();
-      const reply = data.ok === false ? (data.error || "Error") : (data.text || "No reply.");
-      addProjectMsg(chatEl, "ella", reply, proj, projectTokenLabel(data.usage));
-      if (data.usage_summary) paintUsage(data.usage_summary);
-    })
-    .catch((e) => { dots.remove(); addProjectMsg(chatEl, "ella", "Error: " + e.message, proj); });
+  askProject(pid, { text: caption || "What do you see in this image?", image: img });
 }
 
 $("#micBtn").addEventListener("click", () => { if (rec) rec.stop(); else startListening(); });
@@ -637,6 +707,7 @@ $("#micBtn").addEventListener("click", () => { if (rec) rec.stop(); else startLi
 let mainTurn = 0;
 function stopEverything() {
   mainTurn++;
+  stopProjects();
   if (currentAudio) { currentAudio.pause(); currentAudio.src = ""; currentAudio = null; }
   post("/api/cancel", {}).catch(() => {});
   setStatus("online");
@@ -668,8 +739,8 @@ document.addEventListener("keydown", (e) => {
   }
   if (e.ctrlKey && e.key === "k") {
     e.preventDefault();
-    const activeWin = document.querySelector(".proj-win:not(.hidden):last-child");
-    if (activeWin) activeWin.querySelector(".proj-win-input input")?.focus();
+    const activeWin = projectVisible(lastProjectPid) ? openProjectWindows[lastProjectPid].el : null;
+    if (activeWin) activeWin.querySelector(".proj-win-input input[type=text]")?.focus();
     else chatInput.focus();
   }
   if (e.ctrlKey && e.key === "n") {
@@ -1313,6 +1384,9 @@ async function openProjectWindow(pid) {
       <button class="attach-btn pw-attach" title="Attach image">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
       </button>
+      <button class="proj-win-stop hidden" type="button" title="Stop (Esc)">
+        <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+      </button>
       <button class="proj-win-send">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
       </button>
@@ -1334,6 +1408,7 @@ async function openProjectWindow(pid) {
 
   win.querySelector(".pw-min").addEventListener("click", () => {
     win.classList.add("hidden");
+    if (lastProjectPid === pid) lastProjectPid = null;
     minimizedProjects.add(pid);
     renderMiniChips();
     saveWinPos(pid, win);
@@ -1342,6 +1417,7 @@ async function openProjectWindow(pid) {
   win.querySelector(".pw-close").addEventListener("click", () => {
     saveWinPos(pid, win);
     win.remove();
+    if (lastProjectPid === pid) lastProjectPid = null;
     delete openProjectWindows[pid];
     minimizedProjects.delete(pid);
     renderMiniChips();
@@ -1367,20 +1443,8 @@ async function openProjectWindow(pid) {
     projSending = true;
     inputEl.value = "";
     addProjectMsg(chatEl, "user", text, proj);
-    const dots = addThinkingDot(chatEl, proj);
     try {
-      const data = await post("/api/ask", { text, project: pid });
-      dots.remove();
-      const reply = data.ok === false ? (data.error || "Error") : (data.text || "No reply.");
-      addProjectMsg(chatEl, "ella", reply, proj, projectTokenLabel(data.usage));
-      if (data.usage_summary) paintUsage(data.usage_summary);
-      if (win.classList.contains("hidden")) {
-        state.unread++;
-        renderMiniChips();
-      }
-    } catch (e) {
-      dots.remove();
-      addProjectMsg(chatEl, "ella", "Error: " + e.message, proj);
+      await askProject(pid, { text });
     } finally {
       projSending = false;
     }
@@ -1388,6 +1452,7 @@ async function openProjectWindow(pid) {
 
   inputEl.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); sendMsg(); } });
   win.querySelector(".proj-win-send").addEventListener("click", sendMsg);
+  win.querySelector(".proj-win-stop").addEventListener("click", stopEverything);
 
   const fileInput = win.querySelector(".pw-file-input");
   win.querySelector(".pw-attach").addEventListener("click", () => fileInput.click());
@@ -1402,15 +1467,7 @@ async function openProjectWindow(pid) {
       addProjectImg(chatEl, "user", file.name, base64, proj);
       const caption = inputEl.value.trim() || "What do you see in this image?";
       inputEl.value = "";
-      const dots = addThinkingDot(chatEl, proj);
-      post("/api/ask", { text: caption, project: pid, image: base64 })
-        .then((data) => {
-          dots.remove();
-          const reply = data.ok === false ? (data.error || "Error") : (data.text || "No reply.");
-          addProjectMsg(chatEl, "ella", reply, proj, projectTokenLabel(data.usage));
-          if (data.usage_summary) paintUsage(data.usage_summary);
-        })
-        .catch((e) => { dots.remove(); addProjectMsg(chatEl, "ella", "Error: " + e.message, proj); });
+      askProject(pid, { text: caption, image: base64 });
     };
     reader.readAsDataURL(file);
     fileInput.value = "";
