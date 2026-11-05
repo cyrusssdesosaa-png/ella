@@ -249,7 +249,11 @@ def run_model(kind, task, project_prompt=None, queue_on_fail=True, history=None)
         # User pressed Stop: no outbox retry, no history, no usage.
         return "", STOPPED, None
     if remaining is not None:
-        write_json(DATA / "quota.json", {"remaining": remaining, "provider": provider, "at": now_iso()})
+        locked_update(
+            DATA / "quota.json",
+            {"remaining": None, "provider": ""},
+            lambda _: {"remaining": remaining, "provider": provider, "at": now_iso()},
+        )
     if not text:
         if queue_on_fail:
             save_outbox(kind, task, error or "empty")
@@ -301,7 +305,11 @@ def scout_now():
         add_activity("scout", f"kept the previous list: {exc}")
         log_line(f"scout failed: {exc}")
         return {"ok": False, "error": str(exc), "count": len(read_json(DATA / "free-models.json", {}).get("models") or [])}
-    write_json(DATA / "free-models.json", {"at": now_iso(), "models": models})
+    locked_update(
+        DATA / "free-models.json",
+        {"models": []},
+        lambda _: {"at": now_iso(), "models": models},
+    )
     add_activity("scout", f"{len(models)} free models")
     return {"ok": True, "count": len(models)}
 

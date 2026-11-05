@@ -455,8 +455,6 @@ def maybe_missed_checkin():
         stamp = read_json(DATA / "checkin.json", {}).get("at") or ""
         if stamp.startswith(today):
             return
-        if read_json(DATA / "missed.json", {}).get("day") == today:
-            return
         raw = (person.get("checkin") or "09:00").split(":")
         try:
             hour, minute = int(raw[0]), int(raw[1])
@@ -465,7 +463,18 @@ def maybe_missed_checkin():
         now = datetime.now()
         if (now.hour, now.minute) < (hour, minute):
             return
-        write_json(DATA / "missed.json", {"day": today})
+        claimed = []
+
+        def claim_missed(current):
+            data = current if isinstance(current, dict) else {}
+            if data.get("day") == today:
+                return data
+            claimed.append(True)
+            return {"day": today}
+
+        locked_update(DATA / "missed.json", {}, claim_missed)
+        if not claimed:
+            return
         run_locked(check_in)
 
     threading.Thread(target=work, daemon=True).start()
@@ -542,22 +551,37 @@ def save_profile(body):
             value = _require_string(body[key], key, maximum, allow_empty=(key != "checkin"))
             if key == "checkin" and not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", value):
                 raise RequestError(400, "Check-in time must use HH:MM (24-hour time).")
-    current = profile()
-    current.update(
-        {
-            "name": (body.get("name") or current.get("name") or "").strip(),
-            "timezone": (body.get("timezone") or "Asia/Manila").strip(),
-            "does": (body.get("does") or "").strip(),
-            "checkin": (body.get("checkin") or "09:00").strip(),
-            "setup_done": True,
-        }
-    )
-    write_json(DATA / "profile.json", current)
     fact = (body.get("fact") or "").strip()
-    if fact:
-        mem = read_json(DATA / "memory.json", {"facts": []})
-        mem["facts"] = (mem.get("facts") or [])[-29:] + [{"at": now_iso(), "text": fact}]
-        write_json(DATA / "memory.json", mem)
+    profile_path = DATA / "profile.json"
+    memory_path = DATA / "memory.json"
+    default_profile = {
+        "name": "",
+        "timezone": "Asia/Manila",
+        "does": "",
+        "checkin": "09:00",
+        "setup_done": False,
+    }
+    # Hold both locks so profile + optional memory fact append stay consistent.
+    with multi_file_transaction([profile_path, memory_path]):
+        current = read_json(profile_path, default_profile)
+        if not isinstance(current, dict):
+            current = dict(default_profile)
+        current.update(
+            {
+                "name": (body.get("name") or current.get("name") or "").strip(),
+                "timezone": (body.get("timezone") or "Asia/Manila").strip(),
+                "does": (body.get("does") or "").strip(),
+                "checkin": (body.get("checkin") or "09:00").strip(),
+                "setup_done": True,
+            }
+        )
+        write_json(profile_path, current)
+        if fact:
+            mem = read_json(memory_path, {"facts": []})
+            if not isinstance(mem, dict):
+                mem = {"facts": []}
+            mem["facts"] = (mem.get("facts") or [])[-29:] + [{"at": now_iso(), "text": fact}]
+            write_json(memory_path, mem)
     add_activity("profile", "profile saved")
     return current
 
@@ -1332,19 +1356,23 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     ensure_dirs()
-    if not (DATA / "profile.json").exists():
-        write_json(
-            DATA / "profile.json",
-            {
-                "name": "",
-                "timezone": "Asia/Manila",
-                "does": "",
-                "checkin": "09:00",
-                "setup_done": False,
-            },
-        )
-    if not (DATA / "memory.json").exists():
-        write_json(DATA / "memory.json", {"facts": []})
+    profile_path = DATA / "profile.json"
+    with file_transaction(profile_path):
+        if not profile_path.exists():
+            write_json(
+                profile_path,
+                {
+                    "name": "",
+                    "timezone": "Asia/Manila",
+                    "does": "",
+                    "checkin": "09:00",
+                    "setup_done": False,
+                },
+            )
+    memory_path = DATA / "memory.json"
+    with file_transaction(memory_path):
+        if not memory_path.exists():
+            write_json(memory_path, {"facts": []})
     brain_path = DATA / "brain.json"
     with file_transaction(brain_path):
         if not brain_path.exists():
