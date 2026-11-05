@@ -14,13 +14,12 @@
 | 1D | Honest model / provider labels in UI + responses | Implemented, awaiting manual verify | `f8771f7` | Actual provider/model surfaced; not a full token-cost ledger. |
 | 1E | Real Stop — cancel in-flight model/vision | Implemented, awaiting manual verify | `7ee823a` | `/api/cancel` + `cancel.py` epoch; main Stop visible while thinking; skips outbox/history on stop. Offline smoke OK on box for `7ee823a`. |
 | 1F | Lock `brain.json` RMW + backup/restore snapshots | Implemented, awaiting manual verify | `0263e9d` | `save_brain` via `locked_update`; backup/restore under `multi_file_transaction`; startup brain create under `file_transaction`. |
-| 1G | Lock profile/memory RMW + quota/free-models/missed overwrites | Implemented, awaiting manual verify | *(this commit)* | `save_profile` holds profile+memory locks; missed-day claim via `locked_update`; quota/free-models writers via `locked_update`; startup profile/memory init under `file_transaction`. |
+| 1G | Lock profile/memory RMW + quota/free-models/missed overwrites | Implemented, awaiting manual verify | `add1b18` | `save_profile` holds profile+memory locks; missed-day claim via `locked_update`; quota/free-models writers via `locked_update`; startup profile/memory init under `file_transaction`. |
+| 1H | Project-window Stop + paste/focus routing | Implemented, awaiting manual verify | `659757d` | Project windows show a red Stop while a project ask is in flight, wired to the same `stopEverything()` -> `/api/cancel` as main (cancel is a global epoch: Stop in any window stops all in-flight asks; each busy window shows "Stopped."). Paste target resolved synchronously from the paste target / last-interacted surface (mousedown/focusin), so image paste goes to the project window you clicked even when focus is on its chat area; never falls through to main when a project was the target. Ctrl+K focuses the last-used project window. No drag-drop exists in the UI (not added). |
 
 ## Known issues still open (not claimed fixed this turn)
 
 - **Vision personality skip** — vision/`moondream` path does not apply the configured chat personality/router policy (related to BUG-017). Do not treat as done.
-- **Paste-to-wrong-window** — clipboard image paste can still target the wrong chat surface when main + project windows compete for focus.
-- **Project Stop button UI** — main chat has real Stop (`7ee823a`); project windows still lack an equivalent Stop control wired to `/api/cancel`.
 - **BUG-009 — `brain.json` not in backup allowlist** — `make_backup` / `restore_backup` still omit `brain.json` (and other runtime files). 1F locked the snapshot; it did not widen the allowlist.
 - **Single-server owner gate** — runtime reliability gate (one intentional owner of port 8765 / predictable start-stop) remains outstanding; see `docs/ROADMAP.md`.
 - **BUG-001 remnants / broader isolation** — 1B addresses concurrent session isolation in source; full project-history-in-prompt and related isolation defects still need Cyrus live verification before closing.
@@ -29,8 +28,7 @@
 ## Explicitly not started this turn
 
 - Vision personality work
-- Paste-to-correct-window UI fix
-- Project-window Stop button UI
+- Image drag-and-drop into windows (no DnD handler exists yet)
 - Widening backup allowlist / BUG-009 content fix
 - Starting Ella, Ollama, or live tests on Cyrus's PC
 
