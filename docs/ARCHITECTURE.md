@@ -5,7 +5,11 @@
 ## Current modules and responsibilities
 
 - `server.py`: HTTP routing, runtime defaults, project prompt/session coordination, state aggregation, backup/restore, vision call and startup initialization.
-- `router.py`: `.env` parsing, Ollama/OpenRouter/Groq HTTP adapters, provider cascade and basic usage extraction.
+- `permissions.py`: L1–L4 permission decisions. It does not perform the action. L4 never auto-executes.
+- `tasks.py`: local task plans, per-step permission checks, and `data/tasks.json` updates through `locked_update`.
+- `context_manager.py`: local-first routing decision for the existing brain mode. It does not call a provider.
+- `model_registry.py`: configured chat/vision capabilities. Vision id is `moondream:latest`. No prices and no model load.
+- `router.py`: `.env` parsing, Ollama/OpenRouter/Groq HTTP adapters, provider cascade and basic usage extraction. Unknown modes stay on Ollama.
 - `routines.py`: system prompt construction, ephemeral main-chat history, check-in/adapt/outbox routines, usage ledger, quota, identity/context text filters.
 - `store.py`: JSON serialization, atomic replace, activity/log files, history snapshots and a filesystem lock for selected routines.
 - `stt.py`: lazy faster-whisper loading, CUDA/CPU fallback, temporary audio handling and transcription.
@@ -30,7 +34,7 @@ flowchart LR
   Router -->|Local mode| Ollama[Ollama localhost:11434]
   Router -->|Cloud chat| OpenRouter[OpenRouter API]
   Router -->|fallback/routines| Groq[Groq API]
-  Server -->|image analysis| Vision[Ollama moondream:latest]
+  Server -->|image analysis| Vision[Ollama moondream:latest via model registry]
   Browser -->|MediaRecorder POST /api/stt| STT[faster-whisper]
   STT --> Browser
   Browser -->|POST /api/ask| Server
@@ -47,7 +51,7 @@ The web layer polls state via fetch (not push). The screenshot path calls Ollama
   `build_project_prompt()` loads every profile, brain file and skill listed on the selected project card; it does not select one skill based on the current user request. Skill lookup assumes `skills/<name>/SKILL.md`; missing entries silently yield no content. `SKILL_MAP` is exposed in state for the UI, not used as a dynamic loader. `.cursor/skills/` is not read by the server.
 3. **Voice:** browser records audio, sends it to STT, sends transcript to chat, then optionally requests Piper WAV. STT accepts one hard-coded English language. Piper model/voice loads from local path.
 4. **Vault/memory:** Markdown is the human-maintained knowledge base; JSON facts/profile are separate small runtime data. Vault graph is a list of note filenames/folders rather than relationship graph. No vector or semantic index exists.
-5. **Background work:** missed check-in launches a daemon thread at server start. Check-in/adapt/scout/outbox routes are synchronous. There is no durable task queue or general schedule engine.
+5. **Background work:** missed check-in launches a daemon thread at server start. Check-in/adapt/scout/outbox routes are synchronous. Phase 2 adds a durable task record (`data/tasks.json`) for plans and unfinished steps. It is not a scheduler, and it does not run external actions.
 6. **Persistence:** JSON files live in `data/`, ignored by Git. Some writes use atomic replacement but read-modify-write cycles are not coordinated across threads. Vault append uses direct file writes.
 
 ## Current frontend contract

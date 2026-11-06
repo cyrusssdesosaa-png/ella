@@ -4,7 +4,7 @@ Ella is Cyrus's existing local personal-assistant panel and project knowledge wo
 
 ## Current status
 
-- **Implemented in the repository:** localhost panel, chat, Local/Cloud mode setting, Ollama/OpenRouter/Groq adapters, browser image submission to an Ollama vision model, vault search/graph/note reading, project prompt windows, JSON-based project sessions, check-ins, usage ledger, local STT, and Piper TTS wrappers.
+- **Implemented in the repository:** localhost panel, chat, Local/Cloud mode setting, Ollama/OpenRouter/Groq adapters, browser image submission to an Ollama vision model, vault search/graph/note reading, project prompt windows, JSON-based project sessions, check-ins, usage ledger, local STT, and Piper TTS wrappers. On `phase1-reliability`, Phase 1A–1J plus a Phase 2 permission/task/context/model-registry base are in source and awaiting manual verify (`FEATURE_STATUS.md`). That base does not send external actions.
 - **Not established by this checkout:** which models and voice files are installed, whether Ollama is running, the live provider mode, hardware utilization, and whether the historical test results remain reproducible. Runtime data under `data/` and `.env` are intentionally absent from this checkout.
 - **Important:** “local-first” is not equivalent to “offline-only.” The Cloud mode, model scout, and Google-hosted fonts can make external requests. Local mode in the model router selects Ollama only.
 
@@ -14,7 +14,8 @@ See [docs/CURRENT_STATE.md](docs/CURRENT_STATE.md) for verified details and [doc
 
 - `server.py` serves the UI and JSON/audio endpoints on `127.0.0.1:8765` using `ThreadingHTTPServer`.
 - `web/` contains the existing vanilla HTML/CSS/JavaScript interface. It uses `fetch()` requests; there is no WebSocket/SSE event stream.
-- `router.py` routes local requests only to Ollama; Cloud chat tries OpenRouter, Groq, then Ollama, while routines try Groq then Ollama.
+- `router.py` routes local requests only to Ollama; Cloud chat tries OpenRouter, Groq, then Ollama, while routines try Groq then Ollama. Unknown modes stay on Ollama.
+- `permissions.py`, `tasks.py`, `context_manager.py`, and `model_registry.py` are the Phase 2 base. Vision stays `moondream:latest`. L4 steps are stored and not run.
 - `stt.py` wraps faster-whisper with CUDA then CPU fallback. `tts.py` wraps Piper. Voice files and model weights are external local assets.
 - `store.py` persists runtime state as JSON and logs under the ignored `data/` directory. The Markdown vault under `vault/` is separate durable knowledge; it is not a database.
 - `bots/projects.json`, `profiles/`, and `skills/` provide project-specific prompts and reference material. The project windows are prompt-driven chats, not autonomous tool-running agents.

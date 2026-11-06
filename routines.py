@@ -6,6 +6,8 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
+from context_manager import bundles_for_kind, route_for
+from model_registry import DEFAULT_LOCAL_CHAT, OPENROUTER_CHAT
 from router import complete, load_env
 from scout import fetch_free_models
 from store import DATA, add_activity, log_line, locked_update, now_iso, read_json, snapshot_skill, write_json
@@ -292,8 +294,15 @@ def usage_summary():
 def run_model(kind, task, project_prompt=None, queue_on_fail=True, history=None):
     env = load_env()
     models = read_json(DATA / "free-models.json", {"models": []}).get("models") or []
-    model = models[0]["id"] if models else "openrouter/free"
-    brain = read_json(DATA / "brain.json", {"mode": "local", "model": "llama3.2:3b"})
+    model = models[0]["id"] if models else OPENROUTER_CHAT
+    brain = read_json(DATA / "brain.json", {"mode": "local", "model": DEFAULT_LOCAL_CHAT})
+    decision = route_for(brain.get("mode"), bundles_for_kind(kind), kind=kind)
+    if decision["blocked"] or decision["provider_mode"] not in {"local", "cloud"}:
+        log_line("context policy blocked a cloud send")
+        return "", "That stays on this PC.", None
+    if decision["provider_mode"] == "cloud" and not decision["allow_cloud"]:
+        log_line("context policy blocked a cloud send")
+        return "", "That stays on this PC.", None
     msgs = _messages(task, kind, project_prompt=project_prompt, history=history)
     try:
         text, provider, remaining, error, usage = complete(
@@ -301,8 +310,8 @@ def run_model(kind, task, project_prompt=None, queue_on_fail=True, history=None)
             msgs,
             kind,
             model,
-            mode=brain.get("mode") or "local",
-            local_model=brain.get("model") or "llama3.2:3b",
+            mode=decision["provider_mode"],
+            local_model=brain.get("model") or DEFAULT_LOCAL_CHAT,
         )
     except cancel.Cancelled:
         # User pressed Stop: no outbox retry, no history, no usage.

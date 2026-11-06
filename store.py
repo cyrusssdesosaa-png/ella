@@ -2,13 +2,17 @@
 
 import contextlib
 import json
-import msvcrt
 import os
 import tempfile
 import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+
+try:
+    import msvcrt
+except ImportError:  # non-Windows hosts (offline tests). Windows keeps msvcrt.
+    msvcrt = None
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
@@ -33,9 +37,10 @@ def _thread_lock_for(path: Path) -> threading.RLock:
 def _cross_process_lock(path: Path, timeout: float = 5.0):
     """Acquire an exclusive cross-process lock on a dedicated lock file.
 
-    Uses msvcrt.locking() with non-blocking retries so a hung or crashed
-    sibling process cannot permanently block the lock file. Returns the open
-    file descriptor. Must be released with _cross_process_unlock().
+    Uses msvcrt.locking() on Windows, with non-blocking retries so a hung or
+    crashed sibling cannot permanently block the lock file. Other hosts use
+    fcntl so the same helpers can be tested offline. Returns the open file
+    descriptor. Must be released with _cross_process_unlock().
     """
     lock_path = path.with_suffix(path.suffix + ".lock")
     lock_path.parent.mkdir(parents=True, exist_ok=True)
@@ -43,7 +48,12 @@ def _cross_process_lock(path: Path, timeout: float = 5.0):
     deadline = time.monotonic() + timeout
     while True:
         try:
-            msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+            if msvcrt is not None:
+                msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             return fd
         except OSError:
             if time.monotonic() >= deadline:
@@ -54,7 +64,12 @@ def _cross_process_lock(path: Path, timeout: float = 5.0):
 
 def _cross_process_unlock(fd: int):
     try:
-        msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+        if msvcrt is not None:
+            msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(fd, fcntl.LOCK_UN)
     except OSError:
         pass
     os.close(fd)

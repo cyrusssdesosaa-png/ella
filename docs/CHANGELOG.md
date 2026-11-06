@@ -1,6 +1,18 @@
 # Changelog
 
 This log starts with the repository takeover documentation on 2026-11-04. It does not retroactively convert historical `RESULT.md` assertions into verified releases.
+
+## 2026-11-06 — Phase 2 permission, task, context, and model registry
+
+- Added `permissions.py`, `tasks.py`, `context_manager.py`, and `model_registry.py` on top of Phase 1A–1J. The app was not rewritten.
+- L1 observe, L2 prepare, L3 modify local state Ella already owns, L4 external. L4 requires explicit approval metadata and is never executed.
+- Task plans persist in `data/tasks.json` through `locked_update`. Backup/restore allowlists include that file. Progress reports unfinished steps. A forged "done" L4 step is shown and saved as still awaiting approval on resume.
+- Context stays local unless `brain.json` mode is already `cloud`. Cloud routing still uses only OpenRouter, Groq, and Ollama. Unknown modes fail closed to Ollama. Secrets are not offered to cloud. The gate does not send a request.
+- Vision model id is registered as `moondream:latest` and `run_vision` calls that id. No price table. No extra model is loaded.
+- `GET/POST /api/tasks` and a `phase2` block on `/api/state` use the existing token checks. The panel files were not changed.
+- `store.py` uses `fcntl` only when `msvcrt` is unavailable, so the same lock helpers can run in offline tests. Windows locking is still `msvcrt`.
+- Offline unittest `tests/test_phase2_offline.py` was run in the implementation environment. It does not start Ella or Ollama. Nothing here is manually verified.
+- Docs that still called the single-server owner gate or Phase 2 "not started" were corrected. 1J remains awaiting manual verify.
 ## 2026-11-04 — UI-1 Command Center shell and navigation (committed, published)
 
 - Commit: `753225f` (`Complete Ella Command Center UI-1 foundation`) on `main`, pushed to `origin/main`.
