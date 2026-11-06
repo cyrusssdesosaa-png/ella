@@ -33,18 +33,18 @@ These decisions do not override the source-backed implementation inventory in `C
 | System | Intended scope | Current baseline |
 |---|---|---|
 | Core assistant | Conversation/session manager, intent/context/response, personality, cancellation, event bus and tool routing. | Single synchronous chat route; ephemeral main history, no event bus/tool router. |
-| AI engine | Ollama, OpenRouter, Groq adapters; model registry/scheduler, vision, health, local STT/Piper, resource-aware queue. | Basic hard-coded adapters; local/cloud selection; no model registry, central scheduler or hardware monitor. |
+| AI engine | Ollama, OpenRouter, Groq adapters; model registry/scheduler, vision, health, local STT/Piper, resource-aware queue. | Adapters plus a Phase 2 capability registry. Vision remains `moondream:latest`. No central scheduler or hardware monitor. |
 | Usage and performance | Provider/model/token measurements, context capacity/use, time-to-first-token, generation time, TPS, cached tokens, estimated/actual cost with provenance. | Partial provider counts/TPS; incorrect static context/cost presentation (see BUG-007). |
 | Command Center | Status, task, model, project, mode, agents, approvals, integrations, resources, token use, recent events. | Existing ring, project, systems/activity surfaces; no task/approval/agent/resource control center. |
 | Core Inbox | Overnight / Today / Waiting on You with task results, deadlines, failures and approval actions. | Not implemented as structured inbox. |
 | Activity timeline | User/assistant/tool/task/agent/integration/model/error/approval events. | Small bounded activity JSON for selected events only. |
-| Task engine | Persistent queue, planning, dependencies, scheduling, cancellation, progress, failure recovery and reports. | Selected synchronous routines only; no durable task engine. |
+| Task engine | Persistent queue, planning, dependencies, scheduling, cancellation, progress, failure recovery and reports. | Phase 2 stores a local plan, permission checks, progress, and unfinished steps. No scheduler, no L4 execution, no failure-recovery worker. |
 | Memory and knowledge | Session, short/long-term, project, procedural and source-linked knowledge; summarization, search, correction/deletion. | Main history in memory, facts JSON, Markdown vault, substring search; no lifecycle/retrieval service. |
 | Memory Explorer | Visual inspection/editing of memories, projects, decisions and relationships. | Filename/folder graph and note lookup, not editable linked memory. |
 | Approval Center | Central request queue, scope, expiry, decision and audit trail. | Not implemented; bot prompt text alone is not enforceable approval. |
 | Integration Center | Adapter health, auth state, scopes, permission and activity. | Not implemented. |
 | Agents and project bots | Preserve existing bots; later isolated workspaces, dedicated memory, tool permissions, schedules, history and monitoring. | Prompt windows only; no autonomous execution framework. |
-| Capability and tool registry | Registered capabilities declare implementation, availability, authorization and current operational state; common execution, result, cancellation and audit contracts. | No shared capability registry or tool execution interface. |
+| Capability and tool registry | Registered capabilities declare implementation, availability, authorization and current operational state; common execution, result, cancellation and audit contracts. | Phase 2 registers configured model roles and L1–L4 actions. No shared tool-execution runtime. |
 | Automation | Approved file/app/browser tasks, schedules, progress, recovery and cancellation. | No generic automation. Do not add broad desktop access without sandbox and approvals. |
 | Self-healing | Health probes, bounded retries/restart limits, recovery log and escalation. | `startup.bat` restart loop only; no supervised service manager. |
 | Desktop intelligence | Approved screenshots, visual analysis, browser and desktop operations. | Image analysis via Ollama exists; no general desktop automation. |
@@ -104,6 +104,6 @@ Target hardware is user-provided (Ryzen 5 5600G, RTX 3050 8 GB, 16 GB RAM); actu
 
 ## Current execution gate
 
-Repository Phase 1A is present in the committed source, but manual acceptance remains outstanding. The separate runtime investigation identified two `server.py` processes and ambiguous port-8765 ownership; no cleanup/restart is authorized by this plan. Before Phase 1B or additional interface work, first establish a single, identified server process and a predictable startup/shutdown owner, then verify Ollama/model availability, actual provider/model reporting, dependency health and graceful failure using Cyrus's manual checks. Do not change model defaults or provider policy without approval.
+Phase 1A–1J and the Phase 2 engines (permissions, tasks, context, model registry) are present in source on `phase1-reliability` and are awaiting manual verification. Phase 1J is the single-server owner gate (`data/server.lock`, second copy exits 3). Do not describe that gate as not started. Do not change model defaults. Cloud routing still requires the existing Local/Cloud switch. L4 actions are not executed. Cyrus's manual checks remain the acceptance step. Live Ella, Ollama, and inference runs stay his call.
 
 The phase sequence, dependency order and milestone acceptance criteria are in `docs/ROADMAP.md`.

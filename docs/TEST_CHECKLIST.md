@@ -1,6 +1,6 @@
 # Manual test checklist
 
-Prepared 2026-11-04. **Not executed.** Phase 1A changes are source-reviewed only. Ella/Ollama were not started, no model prompt or integration request was sent, and no existing tests were executed.
+Prepared 2026-11-04. **This live checklist has not been executed.** Ella/Ollama were not started for it, and no model prompt or integration request was sent. A later offline Phase 2 unit test (`tests/test_phase2_offline.py`) does not replace these checks.
 
 ## Before testing
 
@@ -115,3 +115,15 @@ Perform these checks on Cyrus's PC after reviewing the diff. Keep Ella bound to 
 - [ ] Use the browser microphone once with a short recording; verify the tokenized `/api/stt` request, transcript, and existing chat flow. Do not test by sending personal audio.
 - [ ] Verify TTS still returns/plays WAV and missing voice/model errors do not display a local absolute path.
 - [ ] `tests/test_ella_chat.py` now fetches the token from Ella's local HTML, but it still contacts the live server, sends inference prompts, exercises STT/TTS and mutates check-in/chat state. Do not run it as part of this checklist unless Cyrus separately chooses to run it with disposable data.
+
+## Phase 2 engines (not executed here)
+
+Offline `python -m unittest tests.test_phase2_offline` does not start Ella or Ollama and does not replace the checks below.
+
+- [ ] With Ella running from this branch, `GET /api/state` includes `phase2`. In Local mode, `phase2.context.allow_cloud` is false and `phase2.model_capabilities.vision_model` is `moondream:latest`.
+- [ ] Flip the existing Local/Cloud control to Cloud and back. The context flag follows that switch. Local mode does not start a cloud request for an ordinary chat.
+- [ ] `POST /api/tasks` with a normal request returns a completed local plan (observe + prepare) and no network send.
+- [ ] `POST /api/tasks` with a step at level 4 returns `awaiting_approval`, leaves the task incomplete, and does not send, post, or spend.
+- [ ] Restart Ella and `GET /api/tasks`. The same unfinished level-4 step is still unfinished.
+- [ ] Backup contains `tasks.json` after a task exists. Restore of an older zip that has no `tasks.json` does not delete the current task file.
+- [ ] Send an image. The vision call is still local `moondream:latest`. Cloud mode does not move that image to OpenRouter or Groq.

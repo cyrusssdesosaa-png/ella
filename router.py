@@ -1,4 +1,7 @@
-"""Model calls. Local mode uses Ollama only. Cloud mode uses the free APIs."""
+"""Model calls. Local mode uses Ollama only. Cloud mode uses the free APIs.
+
+Anything other than an explicit cloud mode stays on Ollama. No new vendors.
+"""
 
 import json
 import os
@@ -7,9 +10,23 @@ import urllib.request
 from pathlib import Path
 
 import cancel
+from model_registry import DEFAULT_LOCAL_CHAT, GROQ_CHAT, OPENROUTER_CHAT
 
 ROOT = Path(__file__).resolve().parent
 TIMEOUT = 30
+
+
+def provider_order(mode, kind):
+    """Local-first provider order.
+
+    Only an explicit cloud mode may name the existing cloud adapters.
+    Any other mode, including a missing or unknown one, stays on Ollama.
+    """
+    if mode != "cloud":
+        return ("ollama",)
+    if kind == "routine":
+        return ("groq", "ollama")
+    return ("openrouter", "groq", "ollama")
 
 
 def load_env():
@@ -97,7 +114,7 @@ def ollama_models(env):
 
 def ollama_chat(env, messages, model=None):
     url = ollama_base(env) + "/api/chat"
-    used = model or "llama3.2:3b"
+    used = model or DEFAULT_LOCAL_CHAT
     payload = {
         "model": used,
         "messages": messages,
@@ -118,7 +135,7 @@ def ollama_chat(env, messages, model=None):
 
 def groq_chat(env, messages):
     key = env.get("GROQ_API_KEY") or ""
-    used = "llama-3.1-8b-instant"
+    used = GROQ_CHAT
     if not key:
         return "", None, "No Groq key", _usage_from(None, "groq", used)
     body, remaining, err = _post(
@@ -133,7 +150,7 @@ def groq_chat(env, messages):
 
 def openrouter_chat(env, messages, model):
     key = env.get("OPENROUTER_API_KEY") or ""
-    used = model or "openrouter/free"
+    used = model or OPENROUTER_CHAT
     if not key:
         return "", None, "No OpenRouter key", _usage_from(None, "openrouter", used)
     body, remaining, err = _post(
@@ -152,13 +169,11 @@ def openrouter_chat(env, messages, model):
 
 
 def complete(env, messages, kind, model=None, mode="local", local_model=None):
-    """Local mode stays on Ollama. Cloud mode uses the free APIs, then Ollama."""
-    if mode == "local":
-        order = ("ollama",)
-    elif kind == "routine":
-        order = ("groq", "ollama")
-    else:
-        order = ("openrouter", "groq", "ollama")
+    """Local mode stays on Ollama. Explicit cloud mode uses the free APIs, then Ollama.
+
+    Unknown modes stay on Ollama so a bad brain value cannot silently go to cloud.
+    """
+    order = provider_order(mode, kind)
     errors = []
     remaining = None
     last_usage = _usage_from(None, "")
@@ -176,11 +191,11 @@ def complete(env, messages, kind, model=None, mode="local", local_model=None):
                 usage["provider"] = name
                 if not usage.get("model"):
                     if name == "ollama":
-                        usage["model"] = local_model or "llama3.2:3b"
+                        usage["model"] = local_model or DEFAULT_LOCAL_CHAT
                     elif name == "groq":
-                        usage["model"] = "llama-3.1-8b-instant"
+                        usage["model"] = GROQ_CHAT
                     else:
-                        usage["model"] = model or "openrouter/free"
+                        usage["model"] = model or OPENROUTER_CHAT
                 return text, name, remaining, None, usage
             errors.append(f"{name}: {err or 'empty reply'}")
     return "", "", remaining, "; ".join(errors), last_usage

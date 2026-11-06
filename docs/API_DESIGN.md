@@ -17,10 +17,11 @@
 | `/` and `/index.html` | Serves `web/index.html`. | Static asset. |
 | `/app.js` | Serves JavaScript. | Static asset. |
 | `/styles.css` | Serves CSS. | Static asset. |
-| `/api/state` | Aggregates profile, facts, check-in, activity, quota, usage, outbox, backup names, skills, stop flag, projects, setup checks, today's note, brain config and local models. | Requires valid per-process token; calls setup/model discovery on state request. |
+| `/api/state` | Aggregates profile, facts, check-in, activity, quota, usage, outbox, backup names, skills, stop flag, projects, setup checks, today's note, brain config, local models, and a `phase2` status object (permission levels, context switch, model capabilities, unfinished tasks). | Requires valid per-process token; calls setup/model discovery on state request. `phase2` does not add another Ollama tags call. |
 | `/api/search?q=...` | Substring search over skills, profiles, vault and runtime data; returns up to 30 hits with paths and matching line snippets. | Requires token; query max 200 chars. |
 | `/api/graph` | Lists vault Markdown note names/folders/categories. | Requires token; filename graph, not relationship graph. |
 | `/api/note?q=...` | Finds notes by filename; returns up to 8 matching names or up to 8,000 chars for one exact-ish match. | Requires token; query max 200 chars. |
+| `/api/tasks` | Read-only task report: count, incomplete count, steps, progress, unfinished items. L4 steps are not reported done. | Requires token. Does not call a model. |
 
 ## Implemented POST routes
 
@@ -38,7 +39,8 @@
 | `/api/ask` | Main chat, project chat, image request, check-in shortcut, backup shortcut or stop-flag shortcut; calls are serialized by `RoutineLock`. |
 | `/api/projects` | Body `action`: list/save/add/session/update/clear_session. Project configs are persisted in tracked `bots/projects.json`; sessions under ignored `data/sessions/`. |
 | `/api/brain` | Saves Local/Cloud mode and selected model. |
-| `/api/stop` | Toggles `data/stop.flag`; does not cancel active work. |
+| `/api/stop` | Toggles `data/stop.flag`; does not cancel active work. `/api/cancel` is the Phase 1E in-flight cancel. |
+| `/api/tasks` | JSON `{"request": string}` saves an L1/L2 plan. Optional `steps` is a list of `{title, action, level, target}` with level 1–4. Level 4 is stored as awaiting approval and is not executed. `{"resume": "t_..."}` reloads one task and reapplies the same rules. Approval fields are rejected. |
 
 All supported GET/POST API routes, including reads, require the token. Unsupported methods return a data-free 405 with an `Allow` header and are not dispatched. Unknown paths return 404. Invalid request bodies no longer become empty objects. Existing successful route paths and frontend payload formats are retained; validation failures use 4xx responses and selected dependency failures use 5xx. There is no version prefix, request ID, idempotency key, rate limit or bounded global thread pool.
 
@@ -82,7 +84,7 @@ Keep the current web UI and routes compatible while adding a versioned contract.
 
 - `GET /api/v1/health`: service/dependency status with configured/healthy distinction.
 - `GET/POST /api/v1/conversations`, `GET/POST /api/v1/conversations/{id}/messages`: explicit sessions and isolated project context.
-- `POST /api/v1/tasks`, `GET /api/v1/tasks`, `POST /api/v1/tasks/{id}/cancel`: durable task lifecycle.
+- `POST /api/v1/tasks`, `GET /api/v1/tasks`, `POST /api/v1/tasks/{id}/cancel`: versioned task lifecycle. Unversioned `GET/POST /api/tasks` is the Phase 2 local plan/report route (no cancel route, no L4 execution).
 - `GET /api/v1/events` (SSE) or WebSocket: task progress, state changes and approvals with reconnect/heartbeat behavior.
 - `GET/POST /api/v1/approvals`, `POST /api/v1/approvals/{id}/decision`: exact-action-bound approval with expiry.
 - `GET /api/v1/integrations`, `POST /api/v1/integrations/{id}/connect|disconnect|health`: no credentials in returned config.

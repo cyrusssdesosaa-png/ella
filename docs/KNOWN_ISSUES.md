@@ -24,9 +24,9 @@ Static audit inventory as of 2026-11-04. No issues here were reproduced by runni
 
 - Fresh checkout defaults to `llama3.2:3b`, while historical project docs say `qwen2.5:7b`; ignored `data/brain.json` was absent, so live configuration is unknown.
 - `pywebview` is imported by `ella.py` but is not in `requirements.txt` (BUG-016).
-- Vision model is hard-coded to `moondream:latest` and bypasses configured router/scheduler (BUG-017).
+- Vision model id is registered as `moondream:latest` and still bypasses the chat router/scheduler (BUG-017). Phase 2 does not add a second vision model or an unload policy.
 - Main chat history is volatile; no explicit conversation/session API.
-- No system/hardware resource monitoring, task queue, approval center, integration framework, append-only audit log or general tool sandbox.
+- No system/hardware resource monitoring, approval-center UI, integration framework, append-only audit log, or general tool sandbox. Phase 2 adds a local task record and an L1–L4 permission check; it does not run external tools.
 - JSON storage has no schema/version migrations; backups omit multiple runtime and user-data categories.
 - The UI depends on externally hosted Google Fonts, so the panel is not fully offline (BUG-012).
 - `projects.py` scans fixed personal Windows paths and may show incomplete/stale results on other machines.

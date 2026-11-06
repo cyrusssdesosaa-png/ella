@@ -65,6 +65,13 @@ Dates are in ISO format. This log records decisions for this repository takeover
 - **Consequence:** Any send requires backend approval showing recipient, subject, complete body and attachments. Secret storage, audit, disconnect/revoke and approval foundations must exist first.
 - **Status:** Planned; no Gmail integration or authorization is implemented.
 
+## 2026-11-06 — Phase 2 engines, no external execution
+
+- **Decision:** Add a permission engine (L1 observe, L2 prepare, L3 modify owned local state, L4 external), a durable task record, a local-first context gate tied to the existing brain mode, and a model capability registry. L4 never auto-executes. Unknown brain modes stay on Ollama. Vision stays `moondream:latest`. No token prices and no new cloud vendors.
+- **Reason:** Later Command Center, memory, and agent work needs a base that cannot silently send private context or run an outside action.
+- **Consequence:** `/api/state` grows a `phase2` object and `/api/tasks` plans local steps. The panel UI is unchanged. Approval Center UI and integrations remain unbuilt. Manual verification is still outstanding.
+- **Status:** Implemented in source; awaiting manual verify.
+
 ## Open decisions
 
 1. Is Cloud mode intended as cloud-only or current hybrid fallback behavior? Should routine requests ever leave device?
@@ -79,4 +86,4 @@ Dates are in ISO format. This log records decisions for this repository takeover
 10. What are acceptable verified resource/latency targets for the actual Windows hardware?
 11. What specific resources/actions may any automation grant cover, and what expiry/rate limits should apply?
 12. What exact Gmail OAuth scopes are sufficient for each initial read/draft/send milestone?
-13. Which service is responsible for a single-instance Ella server lock and graceful shutdown on Windows?
+13. Phase 1J puts the single-instance lock in `server.py` (`data/server.lock`, awaiting manual verify). Whether that remains the long-term owner of graceful shutdown is still open.

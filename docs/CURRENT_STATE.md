@@ -3,6 +3,8 @@
 **Audit date:** 2026-11-04
 **Scope:** source and checked-in assets in this checkout; no app, service, integration, or test was run.
 
+**Update 2026-11-06:** Phase 1J (single-server owner gate) is in source on `phase1-reliability`. Phase 2 adds `permissions.py`, `tasks.py`, `context_manager.py`, and `model_registry.py`. Those four are implemented in source and awaiting manual verify. See `FEATURE_STATUS.md`. Statements below that say there is no task engine, no permission policy, or no single-server owner are superseded for those items only. No live Ella or Ollama session was run for that update.
+
 This document records what repository code supports. It does not claim the machine has the models, voice assets, keys, dependencies, or hardware state needed to use every path.
 
 ## Repository baseline
@@ -29,7 +31,7 @@ This document records what repository code supports. It does not claim the machi
 | HTTP server | `server.py` uses `ThreadingHTTPServer`, bound to `127.0.0.1:8765`; serves three web assets and GET/POST JSON/audio routes. | Phase 1A adds exact loopback Host validation, per-process token auth for all API routes, Origin/Fetch Metadata checks, strict bounded body parsing, per-route schemas, controlled errors, and security headers. No TLS or explicit lifecycle manager. Not runtime-tested. |
 | Browser UI | `web/index.html`, `web/app.js`, `web/styles.css`: vanilla single-page panel with ring, chat, canvas visualizations, navigation, project launcher/windows, graph, systems and activity surfaces. | Existing fetch architecture preserved; shared and direct audio requests attach the page token. Project rendering now escapes or uses DOM text APIs and validated styles. Not runtime-tested. No SSE/WebSocket. Google Fonts CDN is referenced. |
 | Chat/providers | `routines.py` builds prompts and in-memory main chat history; `router.py` calls Ollama, OpenRouter and Groq. | `brain.json` chooses Local or Cloud. Local calls only Ollama. Cloud chat tries OpenRouter → Groq → Ollama; routines try Groq → Ollama. In Cloud, Ollama fallback means “Cloud” does not guarantee a cloud-only response. |
-| Vision | `/api/ask` can send an attached image to a hard-coded local Ollama `moondream:latest` generate route. | This path bypasses `router.py` and does not use a model scheduler. Actual model presence and VRAM use are unknown. |
+| Vision | `/api/ask` sends an attached image to local Ollama `moondream:latest` (`vision_model_id()`). | The id is registered. This path still bypasses `router.py` and does not use a model scheduler. Actual model presence and VRAM use are unknown. |
 | Voice | `stt.py` wraps faster-whisper (`base.en` default, CUDA then CPU fallback); `tts.py` wraps Piper (`jenny_dioco-medium` default, voice files under `D:\ella-voices` by default). Browser uses MediaRecorder and `/api/stt`, then asks the model and calls `/api/tts`. | STT forces English. API now caps audio at 25 MiB and restricts media types; TTS errors are sanitized. External model/voice files and optional CUDA libraries are not checked in. Runtime behavior remains unverified. |
 | Project windows | `bots/projects.json` defines project persona prompts/actions/links; `server.py` stores up to 100 messages per project in ignored `data/sessions/`. | These are prompt-configured chat windows, not autonomous agents. Project history is stored but is not included in the model prompt; main chat context can leak into project prompts. |
 | Runtime persistence | `store.py` writes JSON settings, profile, facts, activity, token calls, check-ins, outbox, sessions, and backup files under `data/`; log lines go to `data/jarvis.log`. | No relational database, schema migration, encryption layer, vector database, or common multi-file transaction. Main chat history is process memory only. |
@@ -65,7 +67,7 @@ Source now requires a random in-memory token on every API route, delivered only 
 | STT and TTS full loop | **Partially verified** | Wiring exists; not executed; status/error shortcomings remain. |
 | Project bots execute jobs/tools | **Not implemented** | Prompt-driven chats and quick actions only; no tool execution framework. |
 | Session persistence | **Partial** | Project sessions persist; primary chat is in-memory and lost on restart. |
-| Task engine, approvals, integration center, audit log | **Not implemented** | Some labels, activity items, and stop flag exist, not these systems. |
+| Task engine, approvals, integration center, audit log | **Task record partial (2026-11-06)** | `tasks.py` persists plans and unfinished steps, including L4 steps that are not run. Approval Center UI, integration center, and audit log are not implemented. |
 | GPU/hardware monitoring | **Unknown / not implemented in repo** | No machine probe for CPU/RAM/GPU/VRAM/temperature. Hardware profile is user-provided, not code-verified. |
 | Packaged PC app | **Not implemented as a package** | `ella.py` is an un-packaged wrapper. |
 | Existing 12/12 test result | **Historical claim only** | `RESULT.md` reports it; test file calls the live server and uses real model/voice routes. No tests run during this audit. |

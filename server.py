@@ -18,9 +18,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from context_manager import context_status, route_for
+from model_registry import DEFAULT_LOCAL_CHAT, capability_snapshot, vision_model_id
+from permissions import level_catalog
 from projects import list_projects
 from routines import STOPPED, adapt, build_vision_prompt, check_in, polish_reply, profile, record_usage, remember_main_chat, retry_outbox, run_model, scout_now, usage_summary
 from router import load_env, ollama_models
+from tasks import TaskRejected, resume_task, submit_task, task_report, task_summary
 import cancel
 from vault import find_note, graph, today_text
 from stt import transcribe
@@ -61,12 +65,12 @@ HEADER_READ_TIMEOUT_SECONDS = 15
 BODY_READ_TIMEOUT_SECONDS = 60
 GET_ROUTES = {
     "/", "/index.html", "/app.js", "/styles.css",
-    "/api/state", "/api/search", "/api/graph", "/api/note",
+    "/api/state", "/api/search", "/api/graph", "/api/note", "/api/tasks",
 }
 POST_ROUTES = {
     "/api/stt", "/api/tts", "/api/profile", "/api/checkin", "/api/scout",
     "/api/adapt", "/api/outbox", "/api/backup", "/api/restore", "/api/ask",
-    "/api/projects", "/api/brain", "/api/stop", "/api/cancel",
+    "/api/projects", "/api/brain", "/api/stop", "/api/cancel", "/api/tasks",
 }
 LOCK = RoutineLock()
 SESSIONS = DATA / "sessions"
@@ -381,6 +385,7 @@ def make_backup():
         DATA / "free-models.json",
         DATA / "outbox.json",
         DATA / "brain.json",
+        DATA / "tasks.json",
         ROOT / "skills" / "mine" / "how-i-help.md",
     ]
     # Hold a consistent multi-file lock while snapshotting so concurrent
@@ -409,6 +414,7 @@ def restore_backup(name):
         "free-models.json": DATA / "free-models.json",
         "outbox.json": DATA / "outbox.json",
         "brain.json": DATA / "brain.json",
+        "tasks.json": DATA / "tasks.json",
         "how-i-help.md": ROOT / "skills" / "mine" / "how-i-help.md",
     }
     targets = list(allowed.values())
@@ -483,7 +489,7 @@ def maybe_missed_checkin():
 
 
 def brain_file():
-    return read_json(DATA / "brain.json", {"mode": "local", "model": "llama3.2:3b"})
+    return read_json(DATA / "brain.json", {"mode": "local", "model": DEFAULT_LOCAL_CHAT})
 
 
 def local_model_names():
@@ -501,7 +507,7 @@ def save_brain(body):
         mode = body.get("mode") or current.get("mode") or "local"
         if not isinstance(mode, str) or mode not in {"local", "cloud"}:
             raise RequestError(400, "Mode must be local or cloud.")
-        model = body.get("model") or current.get("model") or "llama3.2:3b"
+        model = body.get("model") or current.get("model") or DEFAULT_LOCAL_CHAT
         if not isinstance(model, str) or not re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", model.strip()):
             raise RequestError(400, "Invalid model name.")
         model = model.strip()
@@ -509,7 +515,7 @@ def save_brain(body):
 
     payload = locked_update(
         DATA / "brain.json",
-        {"mode": "local", "model": "llama3.2:3b"},
+        {"mode": "local", "model": DEFAULT_LOCAL_CHAT},
         transform,
     )
     add_activity("brain", f"{payload['mode']} {payload['model']}")
@@ -519,6 +525,9 @@ def save_brain(body):
 def state():
     person = profile()
     facts = read_json(DATA / "memory.json", {"facts": []}).get("facts") or []
+    brain = brain_file()
+    local_names = local_model_names()
+    brain_mode = brain.get("mode") if isinstance(brain, dict) else "local"
     return {
         "profile": person,
         "facts": facts[-30:],
@@ -539,8 +548,15 @@ def state():
         "projects": list_projects(),
         "setup": setup_checks(),
         "today": today_text()[:1500],
-        "brain": brain_file(),
-        "local_models": local_model_names(),
+        "brain": brain,
+        "local_models": local_names,
+        "phase2": {
+            "status": "implemented, awaiting manual verify",
+            "permissions": level_catalog(),
+            "context": context_status(brain_mode),
+            "model_capabilities": capability_snapshot(brain if isinstance(brain, dict) else {}, local_names),
+            "tasks": task_summary(),
+        },
     }
 
 
@@ -646,14 +662,15 @@ def append_project_session(project_id, user_msg, ella_msg):
 
 
 def run_vision(text, image_data_url, project_prompt=None, history=None):
-    """Send image + text to moondream via Ollama for vision analysis.
+    """Send image + text to the registered local vision model.
 
+    The capability registry's vision id is moondream:latest. This path still
+    calls Ollama /api/generate with that id and the configured OLLAMA_URL.
     Injects the same Ella identity / project prompt / history policy as text
     chat (via build_vision_prompt), truncated for moondream's small context.
-    Honors cancel tokens from 1E. Still hard-codes moondream:latest as the
-    vision model; uses configured OLLAMA_URL when set.
+    Honors cancel tokens from 1E. Image prompts stay local even in Cloud mode.
     """
-    used_model = "moondream:latest"
+    used_model = vision_model_id()
     usage = {
         "provider": "ollama",
         "model": used_model,
@@ -663,6 +680,20 @@ def run_vision(text, image_data_url, project_prompt=None, history=None):
         "tps": 0,
     }
     try:
+        decision = route_for(
+            "local",
+            [{"kind": "vision", "label": "image"}],
+            destination="local",
+            kind="chat",
+        )
+        if (
+            decision["blocked"]
+            or decision["provider_mode"] != "local"
+            or decision["allow_cloud"]
+            or decision["permitted_providers"] != ["ollama"]
+        ):
+            log_line("context policy blocked vision cloud send")
+            return "", "Image analysis stays on this PC.", usage
         prompt_text = build_vision_prompt(
             text, project_prompt=project_prompt, history=history
         )
@@ -1145,7 +1176,7 @@ class Handler(BaseHTTPRequestHandler):
             self._reject_get_body()
             if path == "/api" or path.startswith("/api/"):
                 self._authorize_api()
-            if path in POST_ROUTES:
+            if path in POST_ROUTES and path not in GET_ROUTES:
                 self.close_connection = True
                 self._send(405, {"ok": False, "error": "Method not allowed."}, extra_headers={"Allow": "POST"})
                 return
@@ -1168,6 +1199,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, {"notes": graph()})
             elif path == "/api/note":
                 self._send(200, find_note(self._query_value(parsed, "q")))
+            elif path == "/api/tasks":
+                self._send(200, {"ok": True, "report": task_report()})
         except RequestError as exc:
             if exc.close:
                 self.close_connection = True
@@ -1181,7 +1214,7 @@ class Handler(BaseHTTPRequestHandler):
             path = parsed.path
             if path == "/api" or path.startswith("/api/"):
                 self._authorize_api()
-            if path in GET_ROUTES:
+            if path in GET_ROUTES and path not in POST_ROUTES:
                 self.close_connection = True
                 self._send(405, {"ok": False, "error": "Method not allowed."}, extra_headers={"Allow": "GET"})
                 return
@@ -1292,6 +1325,31 @@ class Handler(BaseHTTPRequestHandler):
 
             if path == "/api/brain":
                 self._send(200, {"ok": True, "brain": save_brain(self._read_json())})
+                return
+
+            if path == "/api/tasks":
+                body = self._read_json()
+                if "resume" in body:
+                    _validate_keys(body, {"resume"})
+                    task_id = _require_string(body.get("resume"), "Task id", 64)
+                    try:
+                        task = resume_task(task_id)
+                    except TaskRejected as exc:
+                        raise RequestError(exc.status, str(exc)) from None
+                    self._send(200, {"ok": True, "task": task})
+                    return
+                if "steps" in body:
+                    _validate_keys(body, {"request", "steps"})
+                    if not isinstance(body.get("steps"), list):
+                        raise RequestError(400, "Steps must be a list.")
+                else:
+                    _validate_keys(body, {"request"})
+                request_text = _require_string(body.get("request"), "Request", 4000)
+                try:
+                    task = submit_task(request_text, body.get("steps"))
+                except TaskRejected as exc:
+                    raise RequestError(exc.status, str(exc)) from None
+                self._send(200, {"ok": True, "task": task})
                 return
         except RequestError as exc:
             if exc.close:
@@ -1461,7 +1519,7 @@ def _main_locked():
     brain_path = DATA / "brain.json"
     with file_transaction(brain_path):
         if not brain_path.exists():
-            write_json(brain_path, {"mode": "local", "model": "llama3.2:3b"})
+            write_json(brain_path, {"mode": "local", "model": DEFAULT_LOCAL_CHAT})
     log_line("server start")
     threading.Thread(target=tts_warmup, daemon=True).start()
     maybe_missed_checkin()

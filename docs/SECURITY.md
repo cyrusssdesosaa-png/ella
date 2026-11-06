@@ -13,6 +13,8 @@
 
 Destructive actions always require confirmation. Higher permissions never arise from prompt text, an integration message, or another bot's approval. Cyrus may grant narrowly scoped, revocable standing approval only after the policy UI and audit record exist.
 
+The table above used 0–3 while the draft was written. The Phase 2 engine in `permissions.py` uses the same four meanings as L1 observe, L2 prepare, L3 modify, and L4 external. L4 requires an explicit approval object (`approved: true`, `by: "user"`, and the same action name) and still sets `may_execute_external` and `auto_execute` to false. The task runner will not perform an L4 step. There is no Approvals UI and no standing grant yet.
+
 ## Implemented Phase 1A API protections
 
 - **Binding/Host:** the server remains bound to `127.0.0.1:8765`. Every request must have exactly one `Host`, either `127.0.0.1:8765` or `localhost:8765`. Other hostnames, ports, malformed and duplicate Host values are rejected. This reduces DNS-rebinding/Host-header abuse; it does not protect against local malware or a compromised Windows account.
@@ -65,7 +67,7 @@ Each consequential action should present actor, operation, exact target, data to
 
 ## Network and provider policy
 
-- Local mode should enforce an allowlist of loopback endpoints and fail closed if a provider is unavailable; never silently use cloud.
+- Local mode stays on Ollama. `context_manager.route_for` and `router.provider_order` treat any mode other than exact `cloud` as local, so an unknown brain value does not silently select a cloud provider. Cloud mode still uses the existing OpenRouter, Groq, then Ollama cascade. No new vendor was added. The context check does not itself send data.
 - Online mode must be visibly selected and disclose the provider and data transfer before a request. Provide cancellation and cost/status labels with honest unknowns.
 - Validate schemes, hosts, redirects, DNS/IP resolution and request size to prevent localhost or private-network request abuse through arbitrary URL configuration.
 - Prefer official APIs; rate-limit; respect terms. Stop on CAPTCHA, account checkpoint, bot block or unclear authorization.
